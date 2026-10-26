@@ -2,30 +2,33 @@ import React from 'react'
 import { NavLink } from 'react-router-dom'
 import { assets } from '../assets/assets'
 
+const links = [
+    { to: '/', label: 'Dashboard', icon: assets.parcel_icon, end: true },
+    { to: '/add', label: 'Add product', icon: assets.add_icon },
+    { to: '/list', label: 'Products', icon: assets.order_icon },
+    { to: '/orders', label: 'Orders', icon: assets.parcel_icon },
+]
+
+// Vertical on desktop, horizontal scroll strip on mobile. NavLink adds `.active` (styled in index.css).
 const Sidebar = () => {
     return (
-    <div className='w-[22%] min-h-screen border-r-2'>
-        <div className='flex flex-col gap-4 pt-6 pl-[20%] text-[15px]'>
-            
-            
-            <NavLink className='flex items-center gap-3 border border-gray-300 border-r-0 px-3 py-2 rounded-l' to="/add">
-                <img className='w-5 h-5' src={assets.add_icon} alt="" />
-                 <p className='hidden md:block'>Add Items</p>
-            </NavLink>
-
-            <NavLink className='flex items-center gap-3 border border-gray-300 border-r-0 px-3 py-2 rounded-l' to="list">
-                <img className='w-5 h-5' src={assets.order_icon} alt="" />
-                 <p className='hidden md:block'>List Items</p>
-            </NavLink>
-
-            <NavLink className='flex items-center gap-3 border border-gray-300 border-r-0 px-3 py-2 rounded-l' to="orders">
-                <img className='w-5 h-5' src={assets.order_icon} alt="" />
-                 <p className='hidden md:block'>Orders Items</p>
-            </NavLink>
-
-
-        </div>
-    </div>
+    <nav aria-label='Admin' className='border-b border-zinc-800 md:min-h-[calc(100vh-4rem)] md:w-60 md:shrink-0 md:border-b-0 md:border-r'>
+        <ul className='flex gap-2 overflow-x-auto px-4 py-3 md:flex-col md:gap-1 md:px-4 md:py-6'>
+            {links.map((link) => (
+                <li key={link.to}>
+                    <NavLink
+                        to={link.to}
+                        end={link.end}
+                        className='flex items-center gap-3 whitespace-nowrap rounded-md border border-transparent px-3 py-2.5 text-sm text-zinc-400 transition-colors hover:bg-zinc-800/60 hover:text-white'
+                    >
+                        {/* icons are dark PNG/SVGs — inverted for the dark theme */}
+                        <img className='h-4 w-4 opacity-80 invert' src={link.icon} alt='' />
+                        {link.label}
+                    </NavLink>
+                </li>
+            ))}
+        </ul>
+    </nav>
     )
 }
 

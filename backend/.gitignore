@@ -1,3 +1,5 @@
 node_modules
 .env
-uploads
+# multer writes temporary files here before uploading to Cloudinary; keep the empty folder
+uploads/*
+!uploads/.gitkeep

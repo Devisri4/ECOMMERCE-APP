@@ -10,13 +10,19 @@ const authUser = async (req, res, next) => {
     try {
         const token_decode = jwt.verify(token, process.env.JWT_SECRET);
 
+        // Customer tokens carry { id }; anything else (e.g. an admin token) is not a customer session
+        if (!token_decode || typeof token_decode !== 'object' || !token_decode.id) {
+            return res.json({ success: false, message: 'Not Authorized Login Again' });
+        }
+
         // ✅ FIX (THIS IS THE KEY LINE)
         req.userId = token_decode.id;
 
         next();
     } catch (error) {
-        console.log(error);
-        res.json({ success: false, message: error.message });
+        // expired / tampered tokens all mean the same thing to the client: sign in again
+        console.log(error.message);
+        res.json({ success: false, message: 'Not Authorized Login Again' });
     }
 };
 

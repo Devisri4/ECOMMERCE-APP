@@ -4,12 +4,127 @@
 @tailwind components;
 @tailwind utilities;
 
-a.active hr{
-    display:block
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-paper font-sans text-ink antialiased;
+  }
+
+  ::selection {
+    @apply bg-ink text-white;
+  }
+
+  /* Visible keyboard focus everywhere, invisible for mouse users */
+  :focus-visible {
+    @apply outline outline-2 outline-offset-2 outline-ink;
+  }
 }
 
-*{
-    font-family: Outfit;
+@layer components {
+  /* Shared horizontal rhythm for header, main content and footer */
+  .page-container {
+    @apply mx-auto w-full max-w-[1680px] px-4 sm:px-[5vw] md:px-[7vw] lg:px-[9vw];
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 border border-ink bg-ink px-8 py-3.5 text-xs font-medium uppercase tracking-[0.18em] text-white transition-colors duration-300 hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 border border-ink px-8 py-3.5 text-xs font-medium uppercase tracking-[0.18em] text-ink transition-colors duration-300 hover:bg-ink hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-ink;
+  }
+
+  .eyebrow {
+    @apply text-[11px] font-medium uppercase tracking-[0.25em];
+  }
+}
+
+/* Notifications: white card, thin border, coloured edge by type, no emoji/icons */
+:root {
+  --toastify-font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  --toastify-toast-bd-radius: 0px;
+  --toastify-color-light: #ffffff;
+  --toastify-text-color-light: #111111;
+  --toastify-toast-min-height: 52px;
+  --toastify-toast-width: 340px;
+}
+.Toastify .Toastify__toast {
+  border: 1px solid #e5e5e5;
+  border-left: 3px solid #111111;
+  box-shadow: 0 8px 24px rgba(17, 17, 17, 0.08);
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #111111;
+}
+.Toastify .Toastify__toast--error {
+  border-left-color: #b91c1c;
+}
+.Toastify .Toastify__toast--info,
+.Toastify .Toastify__toast--warning {
+  border-left-color: #737373;
+}
+.Toastify .Toastify__close-button {
+  color: #737373;
+  opacity: 0.8;
+  align-self: center;
+}
+
+/* Motion: entrance reveal (stagger with inline animation-delay) and route transitions */
+@keyframes fade-up {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes page-in {
+  from { opacity: 0; transform: translate3d(0, 6px, 0); }
+  to { opacity: 1; transform: none; }
+}
+.reveal {
+  animation: fade-up 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.page-enter {
+  animation: page-in 0.35s ease-out both;
+}
+
+/* Slow, continuous marquee; pauses on hover. Track holds two identical copies, so -50% loops seamlessly. */
+@keyframes marquee {
+  to { transform: translate3d(-50%, 0, 0); }
+}
+.marquee {
+  animation: marquee 38s linear infinite;
+}
+.marquee:hover {
+  animation-play-state: paused;
+}
+
+/* Order confirmation: badge pops in, then the check draws itself */
+@keyframes success-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); }
+}
+@keyframes success-draw {
+  to { stroke-dashoffset: 0; }
+}
+.success-pop {
+  animation: success-pop 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.success-check {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: success-draw 0.4s 0.35s ease-out forwards;
+}
+
+@layer utilities {
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 .prata-regular {
@@ -18,12 +133,15 @@ a.active hr{
   font-style: normal;
 }
 
-::-webkit-scrollbar{
-  display: none;
-}
-@media (max-width:640px) {
-  a.active{
-    background-color: black;
-    color: white;
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

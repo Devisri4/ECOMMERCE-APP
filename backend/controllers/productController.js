@@ -92,4 +92,62 @@ const singleProduct = async (req, res) => {
     }
 }
 
-export {listProducts,addProduct,removeProduct,singleProduct}
+//function for updating product
+// Body (multipart, like /add): id, name, description, price, category, subCategory, bestseller,
+// sizes (JSON array) and existingImages (JSON array of 4 slots: current URL to keep, or null).
+// A new file in image1–image4 replaces that slot. Only URLs the product already has can be kept.
+const CATEGORIES = ["Men", "Women", "Kids"]
+const SUB_CATEGORIES = ["Topwear", "Bottomwear", "Winterwear"]
+const SIZES = ["S", "M", "L", "XL", "XXL"]
+
+const parseJson = (value, fallback) => {
+    try { return JSON.parse(value) } catch { return fallback }
+}
+
+const updateProduct = async (req, res) => {
+    try {
+        const { id, name, description, price, category, subCategory, bestseller } = req.body
+        const product = await productModel.findById(id)
+        if (!product) return res.json({ success: false, message: "Product not found" })
+
+        const sizes = parseJson(req.body.sizes, [])
+        const existingImages = parseJson(req.body.existingImages, [])
+        const numericPrice = Number(price)
+
+        if (!name?.trim() || !description?.trim()) return res.json({ success: false, message: "Name and description are required" })
+        if (!(numericPrice > 0)) return res.json({ success: false, message: "Price must be greater than 0" })
+        if (!CATEGORIES.includes(category) || !SUB_CATEGORIES.includes(subCategory)) return res.json({ success: false, message: "Invalid category" })
+        if (!Array.isArray(sizes) || sizes.length === 0 || !sizes.every((s) => SIZES.includes(s))) return res.json({ success: false, message: "Select at least one valid size" })
+
+        // Build the 4 image slots: uploaded file > kept existing URL > empty
+        const files = req.files || {}
+        const slots = await Promise.all([1, 2, 3, 4].map(async (n, i) => {
+            const file = files[`image${n}`]?.[0]
+            if (file) {
+                const result = await cloudinary.uploader.upload(file.path, { resource_type: "image" })
+                return result.secure_url
+            }
+            const keep = Array.isArray(existingImages) ? existingImages[i] : null
+            return typeof keep === "string" && product.image.includes(keep) ? keep : null
+        }))
+        const image = slots.filter(Boolean)
+        if (image.length === 0) return res.json({ success: false, message: "A product needs at least one image" })
+
+        product.name = name.trim()
+        product.description = description.trim()
+        product.price = numericPrice
+        product.category = category
+        product.subCategory = subCategory
+        product.sizes = sizes
+        product.bestseller = bestseller === "true" || bestseller === true
+        product.image = image
+        await product.save()
+
+        res.json({ success: true, message: "Product Updated", product })
+    } catch (error) {
+        console.log(error)
+        res.json({ success: false, message: error.message })
+    }
+}
+
+export {listProducts,addProduct,removeProduct,singleProduct,updateProduct}

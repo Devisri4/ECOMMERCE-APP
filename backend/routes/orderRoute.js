@@ -4,6 +4,7 @@ import {
   placeOrderStripe,
   verifyStripe,
   userOrders,
+  cancelOrder,
   allOrders,
   updateStatus
 } from '../controllers/orderController.js'
@@ -17,6 +18,7 @@ orderRouter.post('/place', authUser, placeOrder)
 orderRouter.post('/stripe', authUser, placeOrderStripe)
 orderRouter.get('/verifyStripe', verifyStripe)
 orderRouter.post('/userorders', authUser, userOrders)
+orderRouter.post('/cancel', authUser, cancelOrder)
 
 // ADMIN
 orderRouter.post('/list', adminAuth, allOrders)

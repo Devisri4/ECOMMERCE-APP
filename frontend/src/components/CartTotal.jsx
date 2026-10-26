@@ -4,30 +4,28 @@ import Title from './Title';
 
 const CartTotal = () => {
     const {currency, delivery_fee, getCartAmount} = useContext(ShopContext);
+    const subtotal = getCartAmount();
+    const shipping = subtotal === 0 ? 0 : delivery_fee;
+    const money = (n) => `${currency}${n.toFixed(2)}`;
+
     return (
     <div className='w-full'>
-        <div className='text-2x1'>
-            <Title text1={'CART'} text2={'TOTALS'} />
-        </div>
-        <div className='flex flex-col gap-2 mt-2 text-sm'>
-            <div className='flex justify-between'>
-                <p>Subtotal</p>
-                <p>{currency} {getCartAmount()}.00</p>
+        <Title text1={'ORDER'} text2={'SUMMARY'} size='sm' />
+        <dl className='mt-4 flex flex-col text-sm'>
+            <div className='flex justify-between border-b border-neutral-200 py-3'>
+                <dt className='text-neutral-600'>Subtotal</dt>
+                <dd className='text-ink'>{money(subtotal)}</dd>
             </div>
-            <hr />
-            <div className='flex justify-between'>
-                <p>Shipping Fee</p>
-                <p>{currency} {delivery_fee}.00</p>
+            <div className='flex justify-between border-b border-neutral-200 py-3'>
+                <dt className='text-neutral-600'>Shipping</dt>
+                <dd className='text-ink'>{money(shipping)}</dd>
             </div>
-            <hr />
-            <div className='flex justify-between'>
-                <p>Total</p>
-                <b>{currency} {getCartAmount() === 0 ? 0 : getCartAmount() + delivery_fee} </b>
+            <div className='flex justify-between py-4 text-base'>
+                <dt className='font-medium text-ink'>Total</dt>
+                <dd className='font-medium text-ink'>{money(subtotal + shipping)}</dd>
             </div>
-        </div>
-        
+        </dl>
     </div>
-
 )
 
 }

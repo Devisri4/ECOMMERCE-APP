@@ -1,110 +1,179 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { assets } from "../assets/assets";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { ShopContext } from '../context/ShopContext';
 
+const navLinks = [
+  { to: '/', label: 'Home' },
+  { to: '/collection', label: 'Collection' },
+  { to: '/about', label: 'About' },
+  { to: '/contact', label: 'Contact' },
+];
+
+const iconButton = 'flex h-10 w-10 items-center justify-center transition-opacity hover:opacity-60';
+
 const Navbar = () => {
-  const [visible, setVisible] = useState(false); // sidebar hidden by default
+  const [visible, setVisible] = useState(false); // mobile drawer hidden by default
+  const [scrolled, setScrolled] = useState(false);
+  const { pathname } = useLocation();
 
-  const {setShowSearch , getCartCount , navigate, token,setToken,setCartItems} = useContext(ShopContext);
+  const { setShowSearch, getCartCount, navigate, token, logout } = useContext(ShopContext);
+  const cartCount = getCartCount();
 
-  const logout = () => {
-    navigate('/login')
-    localStorage.removeItem('token')
-    setToken('')
-    setCartItems({})
-    
-  }
+  // Search lives on the collection page, so take the shopper there
+  const openSearch = () => {
+    setShowSearch(true);
+    if (!pathname.includes('collection')) navigate('/collection');
+  };
+
+  // Close the mobile drawer whenever the route changes
+  useEffect(() => {
+    setVisible(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 4);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Escape closes the mobile drawer
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') setVisible(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Lock page scroll while the mobile drawer is open
+  useEffect(() => {
+    document.body.style.overflow = visible ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [visible]);
 
   return (
-    <div className="flex items-center justify-between py-5 font-medium relative">
-      {/* Logo */}
-      <Link to= '/'><img src={assets.logo} className="w-36" alt="Logo" /></Link>
+    <>
+      <header
+        className={`sticky top-0 z-40 bg-paper/95 backdrop-blur transition-shadow duration-300 ${scrolled ? 'shadow-[0_1px_0_0_rgba(17,17,17,0.08)]' : ''}`}
+      >
+        <div className="page-container flex h-16 items-center justify-between sm:h-20">
+          {/* Logo */}
+          <div className="flex flex-1 items-center">
+            <Link to="/" aria-label="FOREVER home">
+              <img src={assets.logo} className="w-28 sm:w-32" alt="FOREVER" />
+            </Link>
+          </div>
 
-      {/* Menu links (large screens only) */}
-      <ul className="hidden sm:flex gap-5 text-sm text-gray-700">
-  <NavLink
-    to="/"
-    className={({ isActive }) =>
-      `flex flex-col items-center gap-1 ${isActive ? 'border-b-2 border-black font-bold' : ''}`
-    }
-  >
-    <p>HOME</p>
-  </NavLink>
-  <NavLink
-    to="/collection"
-    className={({ isActive }) =>
-      `flex flex-col items-center gap-1 ${isActive ? 'border-b-2 border-black font-bold' : ''}`
-    }
-  >
-    <p>COLLECTION</p>
-  </NavLink>
-  <NavLink
-    to="/about"
-    className={({ isActive }) =>
-      `flex flex-col items-center gap-1 ${isActive ? 'border-b-2 border-black font-bold' : ''}`
-    }
-  >
-    <p>ABOUT</p>
-  </NavLink>
-  <NavLink
-    to="/contact"
-    className={({ isActive }) =>
-      `flex flex-col items-center gap-1 ${isActive ? 'border-b-2 border-black font-bold' : ''}`
-    }
-  >
-    <p>CONTACT</p>
-  </NavLink>
-</ul>
+          {/* Menu links (large screens only) */}
+          <nav aria-label="Main" className="hidden sm:block">
+            <ul className="flex gap-8">
+              {navLinks.map(({ to, label }) => (
+                <li key={to}>
+                  <NavLink to={to} end={to === '/'} className="group relative block py-2 text-xs uppercase tracking-[0.18em]">
+                    {({ isActive }) => (
+                      <>
+                        <span className={isActive ? 'text-ink' : 'text-neutral-500 transition-colors group-hover:text-ink'}>{label}</span>
+                        <span
+                          aria-hidden="true"
+                          className={`absolute bottom-0 left-0 h-px bg-ink transition-all duration-300 ${isActive ? 'w-full' : 'w-0 group-hover:w-full'}`}
+                        />
+                      </>
+                    )}
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </nav>
 
-      {/* Right side icons */}
-      <div className="flex items-center gap-6">
-        {/* Search */}
-        <img onClick={()=>setShowSearch(true)} src={assets.search_icon} className="w-5 cursor-pointer" alt="" />
+          {/* Right side icons */}
+          <div className="flex flex-1 items-center justify-end gap-1 sm:gap-2">
+            <button type="button" onClick={openSearch} className={iconButton} aria-label="Search products">
+              <img src={assets.search_icon} className="w-[18px]" alt="" />
+            </button>
 
-        {/* Profile dropdown */}
-        <div className="group relative">
-         <img onClick={()=> token ?  null : navigate('/login')} className="w-5 cursor-pointer" src={assets.profile_icon} alt="" />
-        {token && 
-          <div className="group-hover:block hidden absolute right-0 pt-4">
-            <div className="flex flex-col gap-2 w-36 py-3 px-5 bg-slate-100 text-gray-500 rounded">
-              <p className="cursor-pointer hover:text-black">My Profile</p>
-              <p onClick={()=>navigate('/orders')}className="cursor-pointer hover:text-black">Orders</p>
-              <p onClick={logout} className="cursor-pointer hover:text-black">Logout</p>
-            </div>
-          </div> }
-        </div>
-      
+            {/* Account: signed-in shoppers go to their account page, guests to sign in */}
+            <Link
+              to={token ? '/account' : '/login?redirect=/account'}
+              className={iconButton}
+              aria-label={token ? 'My account' : 'Sign in'}
+            >
+              <img className="w-[18px]" src={assets.profile_icon} alt="" />
+            </Link>
 
-        {/* Cart */}
-        <Link to="/cart" className="relative">
-          <img src={assets.cart_icon} className="w-5 min-w-5" alt="" />
-          <p className="absolute right-[-5px] bottom-[-5px] w-4 text-center leading-4 bg-black text-white aspect-square rounded-full text-[8px]">{getCartCount()}</p>
-        </Link>
-        
-        {/* Mobile menu icon (shows sidebar) */}
-        <img 
-          onClick={() => setVisible(true)} 
-          src={assets.menu_icon} 
-          className="w-5 cursor-pointer sm:hidden" 
-          alt="menu"
-        />
+            {/* Cart */}
+            <Link to="/cart" className={`${iconButton} relative`} aria-label={`Cart, ${cartCount} ${cartCount === 1 ? 'item' : 'items'}`}>
+              <img src={assets.cart_icon} className="w-[18px]" alt="" />
+              {cartCount > 0 && (
+                <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-ink px-1 text-[9px] font-medium leading-none text-white">
+                  {cartCount}
+                </span>
+              )}
+            </Link>
 
-        {/* Sidebar menu (mobile only) */}
-        <div className={`fixed z-10 top-0 right-0 bottom-0 bg-white transition-all duration-300 sm:hidden ${visible ? "w-full" : "w-0"}`}>
-          <div className="flex flex-col text-gray-600 h-full">
-            <div onClick={()=>setVisible(false)} className="flex items-center gap-4 p-3 cursor-pointer">
-              <img className="h-4 rotate-180" src={assets.dropdown_icon} alt="Back" />
-              <p>Back</p>
-            </div>
-            <NavLink onClick={()=>setVisible(false)} className='py-2 pl-6 border' to='/'>HOME</NavLink>
-            <NavLink onClick={()=>setVisible(false)} className='py-2 pl-6 border' to='/collection'>COLLECTION</NavLink>
-            <NavLink onClick={()=>setVisible(false)} className='py-2 pl-6 border' to='/about'>ABOUT</NavLink>
-            <NavLink onClick={()=>setVisible(false)} className='py-2 pl-6 border' to='/contact'>CONTACT</NavLink>
+            {/* Mobile menu icon (opens drawer) */}
+            <button
+              type="button"
+              onClick={() => setVisible(true)}
+              className={`${iconButton} sm:hidden`}
+              aria-label="Open menu"
+              aria-expanded={visible}
+              aria-controls="mobile-menu"
+            >
+              <img src={assets.menu_icon} className="w-[18px]" alt="" />
+            </button>
           </div>
         </div>
+      </header>
+
+      {/* Mobile drawer — rendered outside the header so `fixed` is relative to the viewport */}
+      <div className={`fixed inset-0 z-50 sm:hidden ${visible ? '' : 'pointer-events-none'}`} aria-hidden={!visible}>
+        <div
+          onClick={() => setVisible(false)}
+          className={`absolute inset-0 bg-ink/30 transition-opacity duration-300 ${visible ? 'opacity-100' : 'opacity-0'}`}
+        />
+        <nav
+          id="mobile-menu"
+          aria-label="Mobile"
+          inert={!visible}
+          className={`absolute right-0 top-0 flex h-full w-[85%] max-w-sm flex-col bg-paper transition-transform duration-300 ease-out ${visible ? 'translate-x-0' : 'translate-x-full'}`}
+        >
+          <div className="flex h-16 items-center justify-between border-b border-neutral-200 px-6">
+            <span className="eyebrow text-neutral-500">Menu</span>
+            <button type="button" onClick={() => setVisible(false)} className={iconButton} aria-label="Close menu">
+              <img src={assets.cross_icon} className="w-3.5" alt="" />
+            </button>
+          </div>
+          <ul className="flex flex-col px-6 py-4">
+            {navLinks.map(({ to, label }) => (
+              <li key={to}>
+                <NavLink
+                  to={to}
+                  end={to === '/'}
+                  className={({ isActive }) =>
+                    `block border-b border-neutral-200 py-4 font-display text-2xl ${isActive ? 'text-ink' : 'text-neutral-500'}`
+                  }
+                >
+                  {label}
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-auto flex flex-col gap-3 border-t border-neutral-200 px-6 py-6 text-sm text-neutral-600">
+            {token ? (
+              <>
+                <Link to="/account" className="hover:text-ink">My account</Link>
+                <Link to="/account?tab=orders" className="hover:text-ink">My orders</Link>
+                <button type="button" onClick={logout} className="text-left hover:text-ink">Logout</button>
+              </>
+            ) : (
+              <Link to="/login" className="hover:text-ink">Sign in / Create account</Link>
+            )}
+          </div>
+        </nav>
       </div>
-    </div>
+    </>
   );
 };
 

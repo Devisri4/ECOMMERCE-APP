@@ -8,12 +8,61 @@
   font-family: outfit;
 }
 
-select,input,textarea{
-  border:1px solid #c2c2c2;
-  outline-color: #c586a5;
-  border: radius 4px;
+body {
+  background: #18181b;
+  color: #e4e4e7;
 }
+
+/* Dark form controls everywhere in the admin panel */
+select,input,textarea{
+  background-color: #0f0f11;
+  color: #f4f4f5;
+  border:1px solid #3f3f46;
+  border-radius: 6px;
+  outline: none;
+}
+select:focus-visible,input:focus-visible,textarea:focus-visible{
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.35);
+}
+input::placeholder,textarea::placeholder{
+  color: #71717a;
+}
+:focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 2px;
+}
+/* Notifications: charcoal card, violet edge for success, red for errors */
+:root {
+  --toastify-font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  --toastify-toast-bd-radius: 8px;
+  --toastify-color-light: #202024;
+  --toastify-text-color-light: #f4f4f5;
+  --toastify-toast-min-height: 52px;
+  --toastify-toast-width: 340px;
+}
+.Toastify .Toastify__toast {
+  background: #202024;
+  color: #f4f4f5;
+  border: 1px solid #27272a;
+  border-left: 3px solid #8b5cf6;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.Toastify .Toastify__toast--error {
+  border-left-color: #ef4444;
+}
+.Toastify .Toastify__close-button {
+  color: #a1a1aa;
+  opacity: 0.9;
+  align-self: center;
+}
+
+/* Sidebar NavLink active state */
 .active{
-  background-color: #ffebf5;
-  border-color: #c586a5;
+  background-color: rgba(139, 92, 246, 0.14);
+  border-color: rgba(139, 92, 246, 0.5);
+  color: #ffffff;
 }

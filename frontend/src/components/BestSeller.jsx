@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { ShopContext } from '../context/ShopContext';
-import ProductItem from './ProductItem';
-import Title from './Title';
+import ProductGrid from './ProductGrid';
+import SectionHeader from './SectionHeader';
 
 const ITEMS_PER_PAGE = 8;
 
@@ -32,53 +32,50 @@ const BestSeller = () => {
     const currentItems = bestSeller.slice(startIndex, endIndex);
 
     return (
-        <div className="my-10">
-            <div className="text-center text-3xl py-8">
-                <Title text1={'BEST'} text2={'SELLERS'} />
-                <p className="w-3/4 m-auto text-xs sm:text-sm md:text-base text-gray-600">
-                    Explore our collection of best sellers — curated for those who
-                    value elegance, craftsmanship, and timeless appeal.
-                </p>
-            </div>
+        // scroll-mt keeps the heading clear of the sticky header when linked from the hero
+        <section id="bestsellers" className="scroll-mt-24 border-t border-neutral-200 py-16 sm:py-24">
+            <SectionHeader
+                index="04"
+                eyebrow="Most loved"
+                title="Best sellers"
+                description="Explore our collection of best sellers — curated for those who value elegance, craftsmanship, and timeless appeal."
+                linkTo="/collection"
+            />
 
             {/* Products Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-4 gap-y-6">
-                {currentItems.map((item) => (
-                    <ProductItem
-                        key={item._id}
-                        id={item._id}
-                        name={item.name}
-                        image={item.image}
-                        price={item.price}
-                    />
-                ))}
-            </div>
+            <ProductGrid
+                items={currentItems}
+                columns="grid-cols-2 sm:grid-cols-3 md:grid-cols-4"
+                emptyMessage="Best sellers are coming soon."
+            />
 
             {/* Pagination Controls */}
             {totalPages > 1 && (
-                <div className="flex justify-center items-center gap-4 mt-8">
+                <nav aria-label="Best sellers pages" className="mt-12 flex items-center justify-center gap-6">
                     <button
-                        className="px-4 py-2 border rounded disabled:opacity-40"
+                        type="button"
+                        className="btn-secondary px-6 py-3"
                         disabled={currentPage === 1}
                         onClick={() => setCurrentPage(currentPage - 1)}
                     >
                         Previous
                     </button>
 
-                    <span className="text-sm">
-                        Page {currentPage} of {totalPages}
+                    <span className="text-sm tabular-nums text-neutral-600" aria-live="polite">
+                        {currentPage} / {totalPages}
                     </span>
 
                     <button
-                        className="px-4 py-2 border rounded disabled:opacity-40"
+                        type="button"
+                        className="btn-secondary px-6 py-3"
                         disabled={currentPage === totalPages}
                         onClick={() => setCurrentPage(currentPage + 1)}
                     >
                         Next
                     </button>
-                </div>
+                </nav>
             )}
-        </div>
+        </section>
     );
 };
 

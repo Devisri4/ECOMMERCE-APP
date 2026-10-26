@@ -9,7 +9,7 @@ const About = () => {
     <div>
       
       
-      <div className='text-2x1 text-center pt-8 border-t'>
+      <div className='text-2xl text-center pt-8 border-t'>
         <Title text1={'ABOUT'} text2={'US'} />
       </div>
       
@@ -32,11 +32,11 @@ const About = () => {
           </div>
             <div className='border px-10 md:px-16 py-8 sm:py-20 flex flex-col gap-5'>
               <b>Convenience:</b>
-              <p lassName='text-gray-600'>We make shopping quick and hassle-free with an easy interface, secure payments, and fast delivery. You can browse, order, and track your products anytime, from anywhere, without unnecessary steps or delays.</p>
+              <p className='text-gray-600'>We make shopping quick and hassle-free with an easy interface, secure payments, and fast delivery. You can browse, order, and track your products anytime, from anywhere, without unnecessary steps or delays.</p>
             </div>
             <div className='border px-10 md:px-16 py-8 sm:py-20 flex flex-col gap-5'>
               <b>Exceptional Customer service:</b>
-              <p lassName='text-gray-600'>We are committed to helping you at every step, from product selection to after-sales assistance. Our support team responds quickly and works to resolve issues clearly and efficiently, ensuring a smooth and reliable shopping experience.</p>
+              <p className='text-gray-600'>We are committed to helping you at every step, from product selection to after-sales assistance. Our support team responds quickly and works to resolve issues clearly and efficiently, ensuring a smooth and reliable shopping experience.</p>
             </div>
         </div>
         <NewsletterBox/>

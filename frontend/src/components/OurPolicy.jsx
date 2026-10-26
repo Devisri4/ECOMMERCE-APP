@@ -1,31 +1,35 @@
 import React from 'react'
 import { assets } from '../assets/assets'
 
+const policies = [
+  {
+    icon: assets.exchange_icon,
+    title: 'Easy Exchange Policy',
+    text: 'We offer hassle-free exchanges on eligible items.',
+  },
+  {
+    icon: assets.quality_icon,
+    title: '7 Days Return Policy',
+    text: 'Return unused items with tags and original packaging within 7 days of delivery.',
+  },
+  {
+    icon: assets.support_img,
+    title: 'Customer Support',
+    text: 'Our support team is here to help — reach out anytime for quick assistance.',
+  },
+]
 
 const OurPolicy = () => {
   return (
-    <div className='flex flex-col sm:flex-row justify-around gap-12 sm:gap-2 text-center py-20 text -xs sm:text-sm md:text-base text-gray-700'>
-        <div>
-            <img src={assets.exchange_icon} className='w-12 m-auto mb-5' alt="" />
-            <p className=' font-semibold'>Easy Exchange Policy</p>
-            <p className='text-gray-400'>We offer hassle free exchange policy</p>
+    <section aria-label='Our promises' className='grid grid-cols-1 gap-12 border-y border-neutral-200 py-14 text-center sm:grid-cols-3 sm:gap-6 sm:py-16'>
+      {policies.map((policy) => (
+        <div key={policy.title} className='px-4'>
+          <img src={policy.icon} className='mx-auto mb-5 w-9 opacity-80' alt='' />
+          <h3 className='text-xs font-medium uppercase tracking-[0.18em] text-ink'>{policy.title}</h3>
+          <p className='mx-auto mt-3 max-w-xs text-sm leading-relaxed text-neutral-500'>{policy.text}</p>
         </div>
-
-        <div>
-            <img src={assets.quality_icon} className='w-12 m-auto mb-5' alt="" />
-            <p className=' font-semibold'>7 Days Return Policy</p>
-            <p className='text-gray-400'>We offer easy exchanges within 7 days of delivery. Items must be unused, with tags and original packaging intact.</p>
-        </div>
-      
-
-      <div>
-            <img src={assets.support_img} className='w-12 m-auto mb-5' alt="" />
-            <p className=' font-semibold'>Customer Support</p>
-            <p className='text-gray-400'>Our customer support team is here to help you — reach out anytime for quick assistance and solutions.</p>
-        </div>
-      
-      
-    </div>
+      ))}
+    </section>
   )
 }
 

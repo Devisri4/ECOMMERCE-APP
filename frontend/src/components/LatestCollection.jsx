@@ -1,7 +1,7 @@
 import React, { useContext, useState, useEffect } from "react";
 import { ShopContext } from '../context/ShopContext';
-import Title from './Title';
-import ProductItem from './ProductItem'; // make sure you import this if not already
+import SectionHeader from './SectionHeader';
+import ProductGrid from './ProductGrid';
 
 const LatestCollection = () => {
   const { products } = useContext(ShopContext);
@@ -12,23 +12,21 @@ const LatestCollection = () => {
   }, [products]);
 
   return (
-    <div className='my-10'>
-      <div className='text-center py-8 text-3xl'>
-        <Title text1="LATEST" text2="COLLECTIONS" />
-        <p className='w-3/4 m-auto text-xs sm:text-sm md:text-base text-gray-700'>
-          Discover our newest styles curated for every trend and season. Explore fresh arrivals and elevate your style with our newest collection.
-        </p>
-      </div>
+    <section className='border-t border-neutral-200 py-16 sm:py-24'>
+      <SectionHeader
+        index='02'
+        eyebrow='New in'
+        title='Latest collections'
+        description='Discover our newest styles curated for every trend and season. Explore fresh arrivals and elevate your style with our newest collection.'
+        linkTo='/collection'
+      />
 
-      {/* Rendering Products */}
-      <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 gap-y-6'>
-        {
-          latestProducts.map((item, index) => (
-            <ProductItem key={index} id={item._id} image={item.image} name={item.name} price={item.price} />
-          ))
-        }
-      </div>
-    </div>
+      <ProductGrid
+        items={latestProducts}
+        columns='grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'
+        skeletonCount={10}
+      />
+    </section>
   );
 };
 

@@ -1,5 +1,41 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+build/
+coverage/
+
+# Environment files (templates are committed as .env.example)
 .env
+.env.*
+!.env.example
 backend/.env
 frontend/.env
 admin/.env
+
+# Local multer temp uploads (images are stored on Cloudinary); keep the folder itself
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Vercel / editor / OS
+.vercel/
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+*.local
+*.tmp
+
+# Local-only scripts that write to the database
+test_regression.mjs

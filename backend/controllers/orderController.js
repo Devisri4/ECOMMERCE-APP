@@ -1,22 +1,143 @@
 import orderModel from "../models/orderModel.js";
 import userModel from "../models/userModel.js";
+import productModel from "../models/productModel.js";
 import Stripe from "stripe";
 
-const currency = "inr";
+const currency = "usd";
 const deliveryCharge = 10;
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+// Stripe's minimum Checkout Session lifetime. Abandoned sessions expire after this and the
+// pending order is cleaned up the next time order lists are loaded (see syncStripeOrder).
+const STRIPE_SESSION_TTL_SECONDS = 30 * 60;
+
+// Every status the admin panel can set
+const ORDER_STATUSES = ["Order Placed", "Packing", "Shipped", "Out for delivery", "Delivered", "Cancelled"];
+
+// Stripe return URLs come from configuration, never from the request's Host header.
+// Local development falls back to this server; production must set BACKEND_URL.
+const publicBackendUrl = () =>
+  (process.env.BACKEND_URL ||
+    (process.env.NODE_ENV === "production" ? "" : `http://localhost:${process.env.PORT || 4000}`)).replace(/\/+$/, "");
+
+class OrderValidationError extends Error {}
+
+// ----------------- SERVER-SIDE PRICING -----------------
+// The client sends which products/sizes/quantities it wants, but prices and the total are
+// always taken from the database — a tampered request can't change what the customer pays.
+const buildOrderItems = async (items) => {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new OrderValidationError("Your bag is empty");
+  }
+
+  const ids = [...new Set(items.map((item) => String(item?._id)))];
+  const products = await productModel.find({ _id: { $in: ids } }).lean();
+  const byId = new Map(products.map((p) => [String(p._id), p]));
+
+  const orderItems = items.map((item) => {
+    const product = byId.get(String(item?._id));
+    const quantity = Number(item?.quantity);
+    if (!product) throw new OrderValidationError("Some items in your bag are no longer available");
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) throw new OrderValidationError("Invalid item quantity");
+    if (!product.sizes.includes(item.size)) throw new OrderValidationError(`Size ${item.size} is not available for ${product.name}`);
+    // Same shape the frontend already sends (product fields + size + quantity), but from the DB
+    return { ...product, size: item.size, quantity };
+  });
+
+  const subtotal = orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  return { orderItems, amount: subtotal + deliveryCharge };
+};
+
+// ----------------- SERVER-SIDE ADDRESS VALIDATION -----------------
+// Same rules as the checkout form (frontend/src/pages/PlaceOrder.jsx). Only known fields are stored.
+const NAME_LIKE = /^[\p{L}][\p{L}\s'.-]*$/u;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+const nameCheck = (label, min = 2) => (v) =>
+  v.length < min || v.length > 50 || !NAME_LIKE.test(v) ? `Please enter a valid ${label}` : "";
+
+const ADDRESS_RULES = {
+  firstName: nameCheck("first name"),
+  lastName: nameCheck("last name", 1),
+  email: (v) => (!EMAIL_PATTERN.test(v) || v.length > 254 ? "Please enter a valid email address" : ""),
+  street: (v) => (v.length < 5 || v.length > 120 || !/\p{L}/u.test(v) ? "Please enter a full street address" : ""),
+  city: nameCheck("city"),
+  state: nameCheck("state"),
+  zipcode: (v) => (!/^[0-9]{4,10}$/.test(v) ? "ZIP / postal code must be 4–10 digits" : ""),
+  country: nameCheck("country"),
+  phone: (v) => {
+    const digits = v.replace(/\D/g, "");
+    return !/^\+?[0-9\s-]+$/.test(v) || digits.length < 7 || digits.length > 15 ? "Please enter a valid phone number" : "";
+  },
+};
+
+const validateAddress = (address) => {
+  if (!address || typeof address !== "object") throw new OrderValidationError("Please enter your delivery details");
+  const clean = {};
+  for (const [field, rule] of Object.entries(ADDRESS_RULES)) {
+    const value = typeof address[field] === "string" ? address[field].trim() : "";
+    const problem = value ? rule(value) : "Please complete all delivery details";
+    if (problem) throw new OrderValidationError(problem);
+    clean[field] = value;
+  }
+  return clean;
+};
+
+const validationMessage = (err) =>
+  err?.name === "CastError" ? "Some items in your bag are no longer available" : err.message;
+
+// ----------------- STRIPE HELPERS -----------------
+const expireSessionIfOpen = async (sessionId) => {
+  try {
+    await stripe.checkout.sessions.expire(sessionId);
+  } catch {
+    // already expired or completed — nothing to do
+  }
+};
+
+// Brings an unpaid Stripe order in line with its Checkout Session.
+// Returns 'paid' | 'removed' | 'open' | 'processing' | 'skipped'.
+const syncStripeOrder = async (order) => {
+  if (order.paymentMethod !== "Stripe" || order.payment || !order.stripeSessionId) return "skipped";
+  const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
+  if (session.metadata?.orderId !== String(order._id)) return "skipped";
+
+  if (session.payment_status === "paid") {
+    order.payment = true;
+    await order.save();
+    await userModel.findByIdAndUpdate(order.userId, { cartData: {} });
+    return "paid";
+  }
+  if (session.status === "expired") {
+    // Abandoned checkout: nothing was charged, so remove the unpaid order (same as a cancelled checkout)
+    await orderModel.findByIdAndDelete(order._id);
+    return "removed";
+  }
+  return session.status === "complete" ? "processing" : "open";
+};
+
+// Reconciles pending Stripe orders before they are listed, so lists never show stale "pending" orders.
+const syncPendingStripeOrders = async (orders) => {
+  const pending = orders.filter((o) => o.paymentMethod === "Stripe" && !o.payment && o.stripeSessionId).slice(0, 20);
+  if (pending.length === 0) return false;
+  const results = await Promise.allSettled(pending.map(syncStripeOrder));
+  results.forEach((r) => r.status === "rejected" && console.log("Stripe sync failed:", r.reason?.message));
+  return results.some((r) => r.status === "fulfilled" && (r.value === "paid" || r.value === "removed"));
+};
 
 // ----------------- COD ORDER -----------------
 const placeOrder = async (req, res) => {
   try {
     const userId = req.userId;
-    const { items, amount, address } = req.body;
+    const { items, address } = req.body;
+    const cleanAddress = validateAddress(address);
+    const { orderItems, amount } = await buildOrderItems(items);
 
     const newOrder = new orderModel({
       userId,
-      items,
-      address,
+      items: orderItems,
+      address: cleanAddress,
       amount,
       paymentMethod: "COD",
       payment: false,
@@ -26,9 +147,9 @@ const placeOrder = async (req, res) => {
     await newOrder.save();
     await userModel.findByIdAndUpdate(userId, { cartData: {} });
 
-    res.json({ success: true, message: "Order Placed" });
+    res.json({ success: true, message: "Order Placed", orderId: newOrder._id });
   } catch (err) {
-    res.json({ success: false, message: err.message });
+    res.json({ success: false, message: validationMessage(err) });
   }
 };
 
@@ -36,12 +157,20 @@ const placeOrder = async (req, res) => {
 const placeOrderStripe = async (req, res) => {
   try {
     const userId = req.userId;
-    const { items, amount, address } = req.body;
+    const { items, address } = req.body;
+    const cleanAddress = validateAddress(address);
+    const { orderItems, amount } = await buildOrderItems(items);
+
+    const backendUrl = publicBackendUrl();
+    if (!backendUrl) {
+      console.log("BACKEND_URL is not set — card payments are disabled in production");
+      return res.json({ success: false, message: "Card payments are temporarily unavailable. Please choose cash on delivery." });
+    }
 
     const newOrder = new orderModel({
       userId,
-      items,
-      address,
+      items: orderItems,
+      address: cleanAddress,
       amount,
       paymentMethod: "Stripe",
       payment: false,
@@ -50,11 +179,11 @@ const placeOrderStripe = async (req, res) => {
 
     await newOrder.save();
 
-    const line_items = items.map(item => ({
+    const line_items = orderItems.map(item => ({
       price_data: {
         currency,
         product_data: { name: item.name },
-        unit_amount: item.price * 100,
+        unit_amount: Math.round(item.price * 100),
       },
       quantity: item.quantity,
     }));
@@ -68,64 +197,164 @@ const placeOrderStripe = async (req, res) => {
       quantity: 1,
     });
 
-    const session = await stripe.checkout.sessions.create({
-      success_url: `http://localhost:4000/api/order/verifyStripe?success=true&orderId=${newOrder._id}`,
-      cancel_url: `http://localhost:4000/api/order/verifyStripe?success=false&orderId=${newOrder._id}`,
-      mode: "payment",
-      line_items,
-    });
+    let session;
+    try {
+      // {CHECKOUT_SESSION_ID} is filled in by Stripe on both return URLs (verified in test mode)
+      session = await stripe.checkout.sessions.create({
+        success_url: `${backendUrl}/api/order/verifyStripe?success=true&orderId=${newOrder._id}&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${backendUrl}/api/order/verifyStripe?success=false&orderId=${newOrder._id}&session_id={CHECKOUT_SESSION_ID}`,
+        mode: "payment",
+        line_items,
+        metadata: { orderId: String(newOrder._id) },
+        expires_at: Math.floor(Date.now() / 1000) + STRIPE_SESSION_TTL_SECONDS,
+      });
+    } catch (stripeErr) {
+      // Don't leave an order behind for a payment page that was never created
+      await orderModel.findByIdAndDelete(newOrder._id);
+      throw stripeErr;
+    }
+
+    newOrder.stripeSessionId = session.id;
+    await newOrder.save();
 
     res.json({ success: true, session_url: session.url });
+  } catch (err) {
+    res.json({ success: false, message: validationMessage(err) });
+  }
+};
+
+// ----------------- VERIFY STRIPE -----------------
+// Stripe redirects here after checkout. The query string is NOT trusted: the order is only marked
+// paid when Stripe reports its stored session as paid. A cancelled checkout expires the session
+// (so it can't be paid later from browser history) and removes the unpaid order.
+const verifyStripe = async (req, res) => {
+  const frontend = process.env.FRONTEND_URL;
+  const cartUrl = frontend + "/cart";
+  try {
+    const { orderId, session_id } = req.query;
+    const order = await orderModel.findById(orderId);
+    if (!order || order.paymentMethod !== "Stripe") return res.redirect(cartUrl);
+
+    const successUrl = frontend + "/order-success?orderId=" + order._id;
+    if (order.payment) return res.redirect(successUrl); // already confirmed (e.g. page refresh)
+
+    // Prefer the session stored on the order; a different session_id in the URL is rejected
+    const sessionId = order.stripeSessionId || session_id;
+    if (!sessionId || (order.stripeSessionId && session_id && session_id !== order.stripeSessionId)) {
+      return res.redirect(cartUrl);
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (session.metadata?.orderId !== String(order._id)) return res.redirect(cartUrl);
+
+    if (session.payment_status === "paid") {
+      order.payment = true;
+      await order.save();
+      await userModel.findByIdAndUpdate(order.userId, { cartData: {} });
+      return res.redirect(successUrl);
+    }
+
+    if (session.status === "complete") {
+      // Checkout finished but payment is still processing — keep the order pending
+      return res.redirect(frontend + "/orders");
+    }
+
+    // Cancelled (session still open) or abandoned (expired): nothing was charged
+    if (session.status === "open") await expireSessionIfOpen(session.id);
+    await orderModel.findByIdAndDelete(order._id);
+    return res.redirect(cartUrl + "?payment=cancelled");
+  } catch (err) {
+    console.log(err);
+    return res.redirect(cartUrl);
+  }
+};
+
+// ----------------- USER ORDERS -----------------
+const userOrders = async (req, res) => {
+  try {
+    const query = () => orderModel.find({ userId: req.userId }).sort({ date: -1 });
+    let orders = await query();
+    if (await syncPendingStripeOrders(orders)) orders = await query();
+    res.json({ success: true, orders });
   } catch (err) {
     res.json({ success: false, message: err.message });
   }
 };
 
-// ----------------- VERIFY STRIPE -----------------
-const verifyStripe = async (req, res) => {
+// ----------------- CANCEL (customer) -----------------
+// Only the order's owner, only before it ships, and only if nothing has been charged
+// (paid card orders would need a Stripe refund, which isn't implemented).
+const CANCELLABLE_STATUSES = ["Order Placed", "Packing"];
+
+const cancelOrder = async (req, res) => {
   try {
-    const { success, orderId } = req.query;
+    const { orderId } = req.body;
+    const order = await orderModel.findById(orderId);
 
-    if (success === "true") {
-      const order = await orderModel.findByIdAndUpdate(
-        orderId,
-        { payment: true },
-        { new: true }
-      );
-
-      await userModel.findByIdAndUpdate(order.userId, {
-        cartData: {}
-      });
-
-      return res.redirect(process.env.FRONTEND_URL + "/orders");
-    } else {
-      await orderModel.findByIdAndDelete(orderId);
-      return res.redirect(process.env.FRONTEND_URL + "/cart");
+    if (!order || order.userId !== String(req.userId)) {
+      return res.json({ success: false, message: "Order not found" });
     }
+
+    // For card orders, check Stripe first: the payment may have completed in another tab
+    if (order.paymentMethod === "Stripe" && !order.payment && order.stripeSessionId) {
+      const state = await syncStripeOrder(order);
+      if (state === "removed") return res.json({ success: true, message: "Order cancelled" });
+      if (state === "open") await expireSessionIfOpen(order.stripeSessionId);
+    }
+
+    if (order.payment) {
+      return res.json({ success: false, message: "Paid orders can't be cancelled online. Please contact support for a refund." });
+    }
+    if (!CANCELLABLE_STATUSES.includes(order.status)) {
+      return res.json({ success: false, message: "This order can no longer be cancelled" });
+    }
+
+    order.status = "Cancelled";
+    await order.save();
+    res.json({ success: true, message: "Order cancelled" });
   } catch (err) {
-    return res.redirect(process.env.FRONTEND_URL + "/cart");
+    res.json({ success: false, message: err.message });
   }
-};
-
-
-// ----------------- USER ORDERS -----------------
-const userOrders = async (req, res) => {
-  const orders = await orderModel
-    .find({ userId: req.userId })
-    .sort({ date: -1 });
-  res.json({ success: true, orders });
 };
 
 // ----------------- ADMIN -----------------
 const allOrders = async (req, res) => {
-  const orders = await orderModel.find({});
-  res.json({ success: true, orders });
+  try {
+    let orders = await orderModel.find({});
+    if (await syncPendingStripeOrders(orders)) orders = await orderModel.find({});
+    res.json({ success: true, orders });
+  } catch (err) {
+    res.json({ success: false, message: err.message });
+  }
 };
 
 const updateStatus = async (req, res) => {
-  const { orderId, status } = req.body;
-  await orderModel.findByIdAndUpdate(orderId, { status });
-  res.json({ success: true });
+  try {
+    const { orderId, status } = req.body;
+    if (!ORDER_STATUSES.includes(status)) {
+      return res.json({ success: false, message: "Invalid order status" });
+    }
+
+    const order = await orderModel.findById(orderId);
+    if (!order) return res.json({ success: false, message: "Order not found" });
+
+    // There is no refund workflow, so a paid order can't simply be marked Cancelled
+    if (status === "Cancelled" && order.payment) {
+      return res.json({
+        success: false,
+        message: "Paid orders can't be cancelled here. Issue the refund first (e.g. in the Stripe dashboard).",
+      });
+    }
+
+    order.status = status;
+    // Cash on delivery is collected on delivery, so it counts as paid exactly when the order is Delivered
+    if (order.paymentMethod === "COD") order.payment = status === "Delivered";
+    await order.save();
+
+    res.json({ success: true, message: "Status Updated" });
+  } catch (err) {
+    res.json({ success: false, message: err.message });
+  }
 };
 
 export {
@@ -133,6 +362,7 @@ export {
   placeOrderStripe,
   verifyStripe,
   userOrders,
+  cancelOrder,
   allOrders,
   updateStatus
 };

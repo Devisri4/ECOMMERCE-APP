@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { backendUrl } from '../App'
 import { toast } from 'react-toastify'
 import { friendlyError } from '../utils/messages'
+import { formatPrice } from '../utils/currency'
 
 // Small Cloudinary thumbnail instead of the full-size original
 const thumb = (url) =>
@@ -17,7 +18,6 @@ const List = ({token}) => {
   const [loading, setLoading] = useState(true)
   const [confirmId, setConfirmId] = useState(null)
   const [removingId, setRemovingId] = useState(null)
-  const currency = '$';
 
 
   const fetchList = async() => {
@@ -97,11 +97,11 @@ const List = ({token}) => {
               <img className='h-16 w-14 rounded-md bg-zinc-800 object-cover' src={thumb(item.image[0])} alt='' loading='lazy' />
               <div className='min-w-0'>
                 <p className='truncate text-zinc-100'>{item.name}</p>
-                <p className='text-xs text-zinc-500 md:hidden'>{item.category} · {currency}{item.price}</p>
+                <p className='text-xs text-zinc-500 md:hidden'>{item.category} · {formatPrice(item.price)}</p>
                 {item.bestseller && <span className='mt-1 inline-block rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-violet-300'>Bestseller</span>}
               </div>
               <p className='hidden text-zinc-400 md:block'>{item.category} · {item.subCategory}</p>
-              <p className='hidden text-zinc-200 md:block'>{currency}{item.price}</p>
+              <p className='hidden text-zinc-200 md:block'>{formatPrice(item.price)}</p>
               <div className='text-right'>
                 {confirmId === item._id ? (
                   <span className='inline-flex items-center gap-2'>

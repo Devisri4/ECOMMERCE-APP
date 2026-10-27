@@ -1,4 +1,5 @@
 import userModel from "../models/userModel.js";
+import { sendServerError } from "../utils/http.js";
 
 // ✅ ADD TO CART (already correct)
 const addToCart = async (req, res) => {
@@ -16,8 +17,7 @@ const addToCart = async (req, res) => {
 
         res.json({ success: true, message: "Added To Cart" });
     } catch (error) {
-        console.log(error);
-        res.json({ success: false, message: error.message });
+        sendServerError(res, error, "Couldn’t update your bag. Please try again.");
     }
 };
 
@@ -44,8 +44,7 @@ const updateCart = async (req, res) => {
         await userModel.findByIdAndUpdate(userId, { cartData });
         res.json({ success: true, message: "Cart Updated" });
     } catch (error) {
-        console.log(error);
-        res.json({ success: false, message: error.message });
+        sendServerError(res, error, "Couldn’t update your bag. Please try again.");
     }
 };
 
@@ -59,8 +58,7 @@ const getUserCart = async (req, res) => {
 
         res.json({ success: true, cartData });
     } catch (error) {
-        console.log(error);
-        res.json({ success: false, message: error.message });
+        sendServerError(res, error, "Couldn’t update your bag. Please try again.");
     }
 };
 

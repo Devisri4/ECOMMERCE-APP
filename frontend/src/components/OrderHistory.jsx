@@ -4,6 +4,7 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { ShopContext } from "../context/ShopContext";
 import { friendlyError } from "../utils/messages";
+import { formatPrice, orderCurrency } from "../utils/currency";
 
 // Same values the admin panel can set (admin/src/pages/Orders.jsx)
 const STATUS_STEPS = ["Order Placed", "Packing", "Shipped", "Out for delivery", "Delivered"];
@@ -42,7 +43,7 @@ const TrackingTimeline = ({ status }) => {
 };
 
 const OrderHistory = () => {
-  const { backendUrl, token, currency } = useContext(ShopContext);
+  const { backendUrl, token } = useContext(ShopContext);
   const [orderData, setOrderData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -173,7 +174,7 @@ const OrderHistory = () => {
                 <p><span className="text-neutral-500">Order </span><span className="font-medium text-ink">#{order._id.slice(-8).toUpperCase()}</span></p>
                 <p><span className="text-neutral-500">Placed </span>{new Date(order.date).toDateString()}</p>
                 <p><span className="text-neutral-500">Payment </span>{paymentLabel(order)}</p>
-                <p><span className="text-neutral-500">Total </span><span className="font-medium">{currency}{order.amount}</span></p>
+                <p><span className="text-neutral-500">Total </span><span className="font-medium">{formatPrice(order.amount, orderCurrency(order))}</span></p>
               </div>
               <p className="flex items-center gap-2">
                 <span
@@ -197,7 +198,7 @@ const OrderHistory = () => {
                   <div className="text-sm">
                     <p className="font-medium text-ink">{item.name}</p>
                     <p className="mt-1 text-neutral-600">
-                      {currency}{item.price} · Qty {item.quantity} · Size {item.size}
+                      {formatPrice(item.price, orderCurrency(order))} · Qty {item.quantity} · Size {item.size}
                     </p>
                   </div>
                 </li>

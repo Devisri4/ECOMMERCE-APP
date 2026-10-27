@@ -133,7 +133,7 @@ const ProductForm = ({ initial = EMPTY, title, subtitle, submitLabel, submitting
             </select>
           </div>
           <div>
-            <label htmlFor='product-price' className={labelClass}>Price ($)</label>
+            <label htmlFor='product-price' className={labelClass}>Price (₹)</label>
             <input id='product-price' onChange={(e)=>setPrice(e.target.value)} value={price} className='w-full px-3 py-2.5' type="number" min='1' step='1' placeholder='25' required />
           </div>
         </div>

@@ -1,12 +1,13 @@
 import React, { useContext } from 'react'
 import { ShopContext } from '../context/ShopContext'
 import Title from './Title';
+import { formatPrice } from '../utils/currency';
 
 const CartTotal = () => {
     const {currency, delivery_fee, getCartAmount} = useContext(ShopContext);
     const subtotal = getCartAmount();
     const shipping = subtotal === 0 ? 0 : delivery_fee;
-    const money = (n) => `${currency}${n.toFixed(2)}`;
+    const money = (n) => formatPrice(n, currency);
 
     return (
     <div className='w-full'>

@@ -46,13 +46,20 @@ const DELIVERY_FIELDS = [
   },
   { name: 'country', label: 'Country', half: true, input: { type: 'text', autoComplete: 'country-name', maxLength: 50 }, validate: nameRule('country') },
   {
-    name: 'phone', label: 'Phone', input: { type: 'tel', inputMode: 'tel', autoComplete: 'tel', maxLength: 20, placeholder: 'e.g. +91 98765 43210' },
-    // digits, spaces, dashes and a single leading +
-    sanitize: (v) => v.replace(/[^0-9+\s-]/g, '').replace(/(?!^)\+/g, ''),
-    validate: (v) => {
-      const digits = v.replace(/\D/g, '')
-      return !v ? 'Please enter your phone number.' : digits.length < 7 || digits.length > 15 ? 'Phone number must have 7–15 digits.' : ''
+    name: 'phone', label: 'Mobile number', input: { type: 'tel', inputMode: 'numeric', autoComplete: 'tel-national', placeholder: 'e.g. 9876543210' },
+    // Indian mobile: exactly 10 digits starting with 6–9 (same rule as the backend). Non-digits are
+    // stripped, a pasted +91 / 0 prefix is dropped, and input stops at 10 digits. (No maxLength:
+    // it would cut a pasted "+91 98765 43210" before the symbols are removed.)
+    sanitize: (v) => {
+      let digits = v.replace(/\D/g, '')
+      if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2)
+      else if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1)
+      return digits.slice(0, 10)
     },
+    validate: (v) =>
+      !v ? 'Please enter your mobile number.'
+        : !/^[6-9][0-9]{9}$/.test(v) ? 'Enter a valid 10-digit mobile number starting with 6, 7, 8 or 9.'
+        : '',
   },
 ]
 

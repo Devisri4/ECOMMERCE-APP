@@ -2,11 +2,12 @@ import React, { useContext, useEffect, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import { ShopContext } from '../context/ShopContext'
+import { formatPrice, orderCurrency } from '../utils/currency'
 
 // Shown after checkout. Success is only displayed once the backend has the order
 // (and, for Stripe, has marked it paid) — never on the strength of the URL alone.
 const OrderSuccess = () => {
-  const { backendUrl, token, currency, navigate } = useContext(ShopContext)
+  const { backendUrl, token, navigate } = useContext(ShopContext)
   const [searchParams] = useSearchParams()
   const location = useLocation()
   const orderId = searchParams.get('orderId')
@@ -96,7 +97,7 @@ const OrderSuccess = () => {
                 </div>
                 <div className='flex justify-between gap-4 py-3'>
                   <dt className='text-neutral-500'>Total</dt>
-                  <dd className='font-medium text-ink'>{currency}{order.amount}</dd>
+                  <dd className='font-medium text-ink'>{formatPrice(order.amount, orderCurrency(order))}</dd>
                 </div>
               </>
             )}

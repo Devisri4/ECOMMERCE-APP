@@ -41,7 +41,7 @@ storefront, a separate admin panel, and a REST API with Stripe payments and Clou
 Templates are provided in each app's `.env.example`. Never commit real `.env` files.
 
 - **backend:** `MONGODB_URI`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `CLOUDINARY_NAME`,
-  `CLOUDINARY_API_KEY`, `CLOUDINARY_SECRET_KEY`, `STRIPE_SECRET_KEY`, `FRONTEND_URL`, `BACKEND_URL`
+  `CLOUDINARY_API_KEY`, `CLOUDINARY_SECRET_KEY`, `STRIPE_SECRET_KEY`, `FRONTEND_URL`, `ADMIN_URL`, `BACKEND_URL`
 - **frontend, admin:** `VITE_BACKEND_URL`
 
 ## Security highlights

@@ -9,7 +9,9 @@ const adminAuth = async (req,res, next) => {
             return res.json({success: false, message: "Not Authorized Login Again"})
         }
         const token_decode = jwt.verify(token, process.env.JWT_SECRET);
+        // Fails closed: with ADMIN_EMAIL unset, no token can match (undefined === undefined must not pass)
         const isAdmin =
+            Boolean(process.env.ADMIN_EMAIL) &&
             token_decode && typeof token_decode === 'object' &&
             token_decode.role === 'admin' && token_decode.email === process.env.ADMIN_EMAIL
         if (!isAdmin) {

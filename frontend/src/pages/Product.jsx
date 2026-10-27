@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ShopContext } from '../context/ShopContext';
 import RelatedProducts from '../components/RelatedProducts';
 import { optimizeImage } from '../utils/image';
+import { formatPrice } from '../utils/currency';
 
 // Store policies already stated across the site (footer/policy strip) — no invented claims.
 const DELIVERY_NOTES = [
@@ -16,7 +17,7 @@ const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 
 const Product = () => {
   const { productId } = useParams();
-  const { products, productsLoading, productsError, getProductsData, currency, addToCart } = useContext(ShopContext);
+  const { products, productsLoading, productsError, getProductsData, addToCart } = useContext(ShopContext);
   const [activeIndex, setActiveIndex] = useState(0);
   const [size, setSize] = useState('');
   const [sizeError, setSizeError] = useState(false);
@@ -151,7 +152,7 @@ const Product = () => {
             {productData.bestseller && <span className='ml-3 bg-ink px-2 py-1 text-[10px] text-white'>Bestseller</span>}
           </p>
           <h1 className='mt-4 font-display text-3xl leading-tight text-ink sm:text-4xl'>{productData.name}</h1>
-          <p className='mt-4 text-2xl text-ink'>{currency}{productData.price}</p>
+          <p className='mt-4 text-2xl text-ink'>{formatPrice(productData.price)}</p>
           <p className='mt-6 text-sm leading-relaxed text-neutral-600 md:max-w-md'>{productData.description}</p>
 
           {/* Size selector */}

@@ -1,12 +1,15 @@
 import orderModel from "../models/orderModel.js";
 import userModel from "../models/userModel.js";
 import productModel from "../models/productModel.js";
-import Stripe from "stripe";
+import stripe from "../config/stripe.js";
+import { backendUrl as configuredBackendUrl, frontendUrl } from "../config/env.js";
+import { sendServerError } from "../utils/http.js";
 
-const currency = "usd";
-const deliveryCharge = 10;
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// Store currency. Product prices and delivery are whole rupees; Stripe amounts are in paise (×100).
+// Orders placed before the INR switch have no `currency` and are treated as USD (see orderModel).
+export const ORDER_CURRENCY = "INR";
+const currency = "inr";
+export const deliveryCharge = 99;
 
 // Stripe's minimum Checkout Session lifetime. Abandoned sessions expire after this and the
 // pending order is cleaned up the next time order lists are loaded (see syncStripeOrder).
@@ -15,13 +18,11 @@ const STRIPE_SESSION_TTL_SECONDS = 30 * 60;
 // Every status the admin panel can set
 const ORDER_STATUSES = ["Order Placed", "Packing", "Shipped", "Out for delivery", "Delivered", "Cancelled"];
 
-// Stripe return URLs come from configuration, never from the request's Host header.
-// Local development falls back to this server; production must set BACKEND_URL.
-const publicBackendUrl = () =>
-  (process.env.BACKEND_URL ||
-    (process.env.NODE_ENV === "production" ? "" : `http://localhost:${process.env.PORT || 4000}`)).replace(/\/+$/, "");
+// Stripe return URLs come from configuration (config/env.js), never from the request's Host header.
+// Local development falls back to this server; production must set BACKEND_URL and FRONTEND_URL.
+const publicBackendUrl = configuredBackendUrl;
 
-class OrderValidationError extends Error {}
+export class OrderValidationError extends Error {}
 
 // ----------------- SERVER-SIDE PRICING -----------------
 // The client sends which products/sizes/quantities it wants, but prices and the total are
@@ -66,13 +67,11 @@ const ADDRESS_RULES = {
   state: nameCheck("state"),
   zipcode: (v) => (!/^[0-9]{4,10}$/.test(v) ? "ZIP / postal code must be 4–10 digits" : ""),
   country: nameCheck("country"),
-  phone: (v) => {
-    const digits = v.replace(/\D/g, "");
-    return !/^\+?[0-9\s-]+$/.test(v) || digits.length < 7 || digits.length > 15 ? "Please enter a valid phone number" : "";
-  },
+  // Indian mobile numbers: 10 digits starting with 6, 7, 8 or 9
+  phone: (v) => (!/^[6-9][0-9]{9}$/.test(v) ? "Enter a valid 10-digit mobile number starting with 6, 7, 8 or 9" : ""),
 };
 
-const validateAddress = (address) => {
+export const validateAddress = (address) => {
   if (!address || typeof address !== "object") throw new OrderValidationError("Please enter your delivery details");
   const clean = {};
   for (const [field, rule] of Object.entries(ADDRESS_RULES)) {
@@ -84,11 +83,17 @@ const validateAddress = (address) => {
   return clean;
 };
 
-const validationMessage = (err) =>
-  err?.name === "CastError" ? "Some items in your bag are no longer available" : err.message;
+// Only our own validation messages are shown to customers; anything else gets a generic message
+const validationMessage = (err) => {
+  if (err instanceof OrderValidationError) return err.message;
+  if (err?.name === "CastError") return "Some items in your bag are no longer available";
+  console.error(err);
+  return "We couldn't place your order. Please try again.";
+};
 
 // ----------------- STRIPE HELPERS -----------------
 const expireSessionIfOpen = async (sessionId) => {
+  if (!stripe) return;
   try {
     await stripe.checkout.sessions.expire(sessionId);
   } catch {
@@ -99,7 +104,7 @@ const expireSessionIfOpen = async (sessionId) => {
 // Brings an unpaid Stripe order in line with its Checkout Session.
 // Returns 'paid' | 'removed' | 'open' | 'processing' | 'skipped'.
 const syncStripeOrder = async (order) => {
-  if (order.paymentMethod !== "Stripe" || order.payment || !order.stripeSessionId) return "skipped";
+  if (!stripe || order.paymentMethod !== "Stripe" || order.payment || !order.stripeSessionId) return "skipped";
   const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
   if (session.metadata?.orderId !== String(order._id)) return "skipped";
 
@@ -140,6 +145,7 @@ const placeOrder = async (req, res) => {
       address: cleanAddress,
       amount,
       paymentMethod: "COD",
+      currency: ORDER_CURRENCY,
       payment: false,
       date: Date.now(),
     });
@@ -162,8 +168,8 @@ const placeOrderStripe = async (req, res) => {
     const { orderItems, amount } = await buildOrderItems(items);
 
     const backendUrl = publicBackendUrl();
-    if (!backendUrl) {
-      console.log("BACKEND_URL is not set — card payments are disabled in production");
+    if (!stripe || !backendUrl || !frontendUrl()) {
+      console.error("[config] Card payments disabled: STRIPE_SECRET_KEY, BACKEND_URL or FRONTEND_URL is not set");
       return res.json({ success: false, message: "Card payments are temporarily unavailable. Please choose cash on delivery." });
     }
 
@@ -173,6 +179,7 @@ const placeOrderStripe = async (req, res) => {
       address: cleanAddress,
       amount,
       paymentMethod: "Stripe",
+      currency: ORDER_CURRENCY,
       payment: false,
       date: Date.now(),
     });
@@ -228,7 +235,7 @@ const placeOrderStripe = async (req, res) => {
 // paid when Stripe reports its stored session as paid. A cancelled checkout expires the session
 // (so it can't be paid later from browser history) and removes the unpaid order.
 const verifyStripe = async (req, res) => {
-  const frontend = process.env.FRONTEND_URL;
+  const frontend = frontendUrl();
   const cartUrl = frontend + "/cart";
   try {
     const { orderId, session_id } = req.query;
@@ -237,6 +244,7 @@ const verifyStripe = async (req, res) => {
 
     const successUrl = frontend + "/order-success?orderId=" + order._id;
     if (order.payment) return res.redirect(successUrl); // already confirmed (e.g. page refresh)
+    if (!stripe) return res.redirect(cartUrl);
 
     // Prefer the session stored on the order; a different session_id in the URL is rejected
     const sessionId = order.stripeSessionId || session_id;
@@ -277,7 +285,7 @@ const userOrders = async (req, res) => {
     if (await syncPendingStripeOrders(orders)) orders = await query();
     res.json({ success: true, orders });
   } catch (err) {
-    res.json({ success: false, message: err.message });
+    sendServerError(res, err);
   }
 };
 
@@ -313,7 +321,7 @@ const cancelOrder = async (req, res) => {
     await order.save();
     res.json({ success: true, message: "Order cancelled" });
   } catch (err) {
-    res.json({ success: false, message: err.message });
+    sendServerError(res, err);
   }
 };
 
@@ -324,7 +332,7 @@ const allOrders = async (req, res) => {
     if (await syncPendingStripeOrders(orders)) orders = await orderModel.find({});
     res.json({ success: true, orders });
   } catch (err) {
-    res.json({ success: false, message: err.message });
+    sendServerError(res, err);
   }
 };
 
@@ -353,7 +361,7 @@ const updateStatus = async (req, res) => {
 
     res.json({ success: true, message: "Status Updated" });
   } catch (err) {
-    res.json({ success: false, message: err.message });
+    sendServerError(res, err);
   }
 };
 

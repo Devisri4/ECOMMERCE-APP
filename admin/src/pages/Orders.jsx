@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react'
 import axios from 'axios'
 import { toast } from 'react-toastify'
 import { friendlyError } from '../utils/messages'
-import { backendUrl, currency } from '../App'
+import { backendUrl } from '../App'
+import { formatPrice, orderCurrency } from '../utils/currency'
 
 const STATUSES = ['Order Placed', 'Packing', 'Shipped', 'Out for delivery', 'Delivered', 'Cancelled']
 
@@ -101,7 +102,7 @@ const Orders = ({ token }) => {
 
             {/* Meta */}
             <div className="text-zinc-400">
-              <p className="text-lg font-semibold text-white">{currency}{order.amount}</p>
+              <p className="text-lg font-semibold text-white">{formatPrice(order.amount, orderCurrency(order))}</p>
               <p className="mt-1">{order.items.length} {order.items.length === 1 ? 'item' : 'items'} · {order.paymentMethod}</p>
               <p className={order.payment ? 'text-emerald-300' : 'text-amber-300'}>
                 {order.payment ? 'Paid' : order.paymentMethod === 'COD' ? 'Collect on delivery' : 'Card payment not completed'}

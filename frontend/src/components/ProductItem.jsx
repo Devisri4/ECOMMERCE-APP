@@ -1,10 +1,9 @@
-import React, { useContext } from 'react';
-import { ShopContext } from '../context/ShopContext';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { optimizeImage } from '../utils/image';
+import { formatPrice } from '../utils/currency';
 
 const ProductItem = ({ id, image, name, price }) => {
-    const { currency } = useContext(ShopContext);
 
     // ✅ handle image array OR string
     const productImage = optimizeImage(Array.isArray(image) ? image[0] : image, 600);
@@ -35,7 +34,7 @@ const ProductItem = ({ id, image, name, price }) => {
             <div className="flex flex-col gap-1 pt-3">
                 <p className="line-clamp-2 text-sm leading-snug text-neutral-700">{name}</p>
                 <p className="text-sm font-medium">
-                    {currency}{price}
+                    {formatPrice(price)}
                 </p>
             </div>
         </Link>

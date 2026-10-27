@@ -1,7 +1,9 @@
 import validator from "validator"
 import bcrypt from "bcrypt"
 import jwt from 'jsonwebtoken'
+import crypto from "crypto";
 import userModel from "../models/userModel.js";
+import { sendServerError } from "../utils/http.js";
 
 // Customer sessions expire after 7 days (older tokens issued without an expiry keep working until logout)
 const createToken = (id) => {
@@ -30,8 +32,7 @@ const loginUser = async (req, res) => {
             return res.json({ success: false, message: 'Invalid credentials' });
         }
     } catch (error) {
-        console.log(error);
-        res.json({ success: false, message: error.message });
+        sendServerError(res, error);
     }
 }
 
@@ -70,25 +71,44 @@ const registerUser = async (req, res) => {
         res.json({ success: true, token });
 
     } catch (error) {
-        console.log(error);
-        res.json({ success: false, message: error.message });
+        sendServerError(res, error);
     }
 }
 
+// Constant-time string comparison (avoids leaking how many characters matched)
+const safeEqual = (a, b) => {
+    const left = Buffer.from(String(a))
+    const right = Buffer.from(String(b))
+    return left.length === right.length && crypto.timingSafeEqual(left, right)
+}
+
 // Route for admin login
+// Fails closed: if ADMIN_EMAIL / ADMIN_PASSWORD (or JWT_SECRET) aren't configured, nobody can sign in —
+// otherwise an empty request would "match" two undefined values.
 const adminLogin = async (req, res) => {
     try {
+        const { ADMIN_EMAIL, ADMIN_PASSWORD, JWT_SECRET } = process.env
+        if (!ADMIN_EMAIL || !ADMIN_PASSWORD || !JWT_SECRET) {
+            console.error("[config] Admin login refused: ADMIN_EMAIL, ADMIN_PASSWORD or JWT_SECRET is not set")
+            return res.json({ success: false, message: "Admin sign-in is not available right now" })
+        }
+
         const {email, password} = req.body
-        if (email === process.env.ADMIN_EMAIL && password === process.env.ADMIN_PASSWORD) {
+        if (typeof email !== "string" || typeof password !== "string" || !email || !password) {
+            return res.json({ success: false, message: "Invalid credentials" })
+        }
+
+        const emailOk = safeEqual(email, ADMIN_EMAIL)
+        const passwordOk = safeEqual(password, ADMIN_PASSWORD)
+        if (emailOk && passwordOk) {
             // The token carries a role claim only — never the admin password (JWT payloads are readable)
-            const token = jwt.sign({ role: 'admin', email }, process.env.JWT_SECRET, { expiresIn: '1d' });
+            const token = jwt.sign({ role: 'admin', email }, JWT_SECRET, { expiresIn: '1d' });
             res.json({success: true, token})
         } else {
             res.json({ success: false, message: "Invalid credentials"})
         }
     } catch (error) {
-        console.log(error);
-        res.json({ success: false, message: error.message });
+        sendServerError(res, error, "Couldn't sign you in. Please try again.");
     }
 
 }
@@ -104,8 +124,7 @@ const getProfile = async (req, res) => {
         if (!user) return res.json({ success: false, message: NOT_AUTHORIZED })
         res.json({ success: true, user: { name: user.name, email: user.email } })
     } catch (error) {
-        console.log(error);
-        res.json({ success: false, message: error.message });
+        sendServerError(res, error);
     }
 }
 
@@ -120,8 +139,7 @@ const updateProfile = async (req, res) => {
         if (!user) return res.json({ success: false, message: NOT_AUTHORIZED })
         res.json({ success: true, user: { name: user.name, email: user.email } })
     } catch (error) {
-        console.log(error);
-        res.json({ success: false, message: error.message });
+        sendServerError(res, error);
     }
 }
 
@@ -152,8 +170,7 @@ const changePassword = async (req, res) => {
 
         res.json({ success: true, message: "Password updated" })
     } catch (error) {
-        console.log(error);
-        res.json({ success: false, message: error.message });
+        sendServerError(res, error);
     }
 }
 

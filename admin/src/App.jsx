@@ -12,8 +12,10 @@ import { ToastContainer, toast } from 'react-toastify';
 import axios from 'axios';
 import 'react-toastify/dist/ReactToastify.css';
 
-export const backendUrl = import.meta.env.VITE_BACKEND_URL
-export const currency ='$'
+// A deployed build never silently falls back to localhost: VITE_BACKEND_URL must be set in production
+export const backendUrl = (
+  import.meta.env.VITE_BACKEND_URL || (import.meta.env.DEV ? 'http://localhost:4000' : '')
+).replace(/\/+$/, '')
 
 // Registered at module load (not in an effect) so it also covers requests that child pages
 // send on their first render — React runs child effects before the parent's.
@@ -42,6 +44,20 @@ useEffect(() => {
   };
   return () => { onSessionExpired = () => {} };
 }, []);
+
+  // Clear message instead of a login form that can never work
+  if (!backendUrl) {
+    return (
+      <main role='alert' className='flex min-h-screen items-center justify-center bg-[#18181b] px-4 text-center text-zinc-300'>
+        <div className='max-w-md rounded-xl border border-zinc-800 bg-[#202024] p-8'>
+          <p className='text-lg font-semibold text-white'>Admin panel isn’t configured</p>
+          <p className='mt-2 text-sm text-zinc-400'>
+            <code className='text-violet-300'>VITE_BACKEND_URL</code> is not set for this build. Add it in the hosting settings and redeploy.
+          </p>
+        </div>
+      </main>
+    )
+  }
 
   return (
     <div className='min-h-screen bg-[#18181b] text-zinc-200'>

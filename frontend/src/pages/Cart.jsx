@@ -4,6 +4,7 @@ import { ShopContext } from '../context/ShopContext';
 import Title from '../components/Title';
 import CartTotal from '../components/CartTotal';
 import { optimizeImage } from '../utils/image';
+import { formatPrice } from '../utils/currency';
 
 // Matches the server-side limit in orderController.buildOrderItems
 const MAX_QTY = 99;
@@ -11,7 +12,7 @@ const MAX_QTY = 99;
 const stepButton = 'flex h-9 w-9 items-center justify-center text-base text-ink transition-colors hover:bg-neutral-100 disabled:opacity-40';
 
 const Cart = () => {
-  const { products, productsLoading, cartLoaded, currency, cartItems, updateQuantity, navigate } = useContext(ShopContext);
+  const { products, productsLoading, cartLoaded, cartItems, updateQuantity, navigate } = useContext(ShopContext);
 
   // Flatten { productId: { size: qty } } into rows, skipping products no longer in the catalogue
   const cartData = useMemo(() => {
@@ -73,7 +74,7 @@ const Cart = () => {
                     <Link to={`/product/${product._id}`} className='line-clamp-2 text-sm font-medium text-ink hover:underline sm:text-base'>
                       {product.name}
                     </Link>
-                    <p className='mt-1 text-sm text-neutral-600'>Size {size} · {currency}{product.price}</p>
+                    <p className='mt-1 text-sm text-neutral-600'>Size {size} · {formatPrice(product.price)}</p>
 
                     {/* Quantity */}
                     <div className='mt-4 inline-flex items-center border border-neutral-300 bg-white' role='group' aria-label={`Quantity for ${product.name}, size ${size}`}>
@@ -99,7 +100,7 @@ const Cart = () => {
                   </div>
 
                   <div className='flex items-end justify-between gap-4 sm:flex-col sm:items-end'>
-                    <p className='text-sm font-medium text-ink'>{currency}{(product.price * quantity).toFixed(2)}</p>
+                    <p className='text-sm font-medium text-ink'>{formatPrice(product.price * quantity)}</p>
                     <button
                       type='button'
                       onClick={() => updateQuantity(product._id, size, 0)}

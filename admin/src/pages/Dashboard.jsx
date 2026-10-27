@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
-import { backendUrl, currency } from '../App'
+import { backendUrl } from '../App'
+import { formatPrice, orderCurrency } from '../utils/currency'
 
 // Overview computed from the existing product list + admin order list endpoints (no new APIs, no mock data)
 const Dashboard = ({ token }) => {
@@ -38,14 +39,20 @@ const Dashboard = ({ token }) => {
 
   const orders = data?.orders || []
   const active = orders.filter((o) => o.status !== 'Cancelled')
+  const paidRevenue = (code) =>
+    active.filter((o) => o.payment && orderCurrency(o) === code).reduce((sum, o) => sum + o.amount, 0)
   const stats = data && [
     { label: 'Products', value: data.products.length, hint: `${data.products.filter((p) => p.bestseller).length} bestsellers` },
     { label: 'Orders', value: active.length, hint: `${orders.length - active.length} cancelled` },
     { label: 'Awaiting fulfilment', value: active.filter((o) => o.status !== 'Delivered').length, hint: 'Not yet delivered' },
     {
+      // Never add rupees and dollars together: INR is the headline, pre-INR (USD) revenue is shown separately
       label: 'Paid revenue',
-      value: `${currency}${active.filter((o) => o.payment).reduce((sum, o) => sum + o.amount, 0).toLocaleString()}`,
-      hint: `${active.filter((o) => !o.payment).length} unpaid (COD / pending)`,
+      value: formatPrice(paidRevenue('INR'), 'INR'),
+      hint: [
+        paidRevenue('USD') > 0 && `+ ${formatPrice(paidRevenue('USD'), 'USD')} from earlier USD orders`,
+        `${active.filter((o) => !o.payment).length} unpaid (COD / pending)`,
+      ].filter(Boolean).join(' · '),
     },
   ]
   const recent = [...orders].sort((a, b) => b.date - a.date).slice(0, 5)
@@ -83,7 +90,7 @@ const Dashboard = ({ token }) => {
                 <span className='font-mono text-xs text-zinc-400'>#{o._id.slice(-8).toUpperCase()}</span>
                 <span className='text-zinc-300'>{o.address?.firstName} {o.address?.lastName}</span>
                 <span className='text-zinc-400'>{new Date(o.date).toLocaleDateString()}</span>
-                <span className='text-zinc-200'>{currency}{o.amount}</span>
+                <span className='text-zinc-200'>{formatPrice(o.amount, orderCurrency(o))}</span>
                 <span className={`rounded-full px-2.5 py-0.5 text-xs ${o.status === 'Cancelled' ? 'bg-red-500/10 text-red-300' : o.status === 'Delivered' ? 'bg-emerald-500/10 text-emerald-300' : 'bg-violet-500/10 text-violet-300'}`}>
                   {o.status}
                 </span>

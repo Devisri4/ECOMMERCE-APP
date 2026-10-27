@@ -3,6 +3,7 @@ import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { friendlyError } from '../utils/messages';
+import { STORE_CURRENCY } from '../utils/currency';
 
 export const ShopContext = createContext();
 
@@ -29,12 +30,14 @@ axios.interceptors.response.use((res) => {
 });
 
 const ShopContextProvider = ({ children }) => {
-    const currency = '$';
-    const delivery_fee = 10;
+    // Store currency + flat delivery charge (₹99) — must match backend/controllers/orderController.js
+    const currency = STORE_CURRENCY;
+    const delivery_fee = 99;
 
-    // backend URL with fallback
-    const backendUrl =
-        import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000';
+    // A deployed build never silently falls back to localhost: VITE_BACKEND_URL must be set in production
+    const backendUrl = (
+        import.meta.env.VITE_BACKEND_URL || (import.meta.env.DEV ? 'http://localhost:4000' : '')
+    ).replace(/\/+$/, '');
 
     const [products, setProducts] = useState([]);
     const [productsLoading, setProductsLoading] = useState(true);
@@ -50,6 +53,12 @@ const ShopContextProvider = ({ children }) => {
 
     /* ---------------- PRODUCTS ---------------- */
     const getProductsData = async () => {
+        if (!backendUrl) {
+            console.error('VITE_BACKEND_URL is not set for this build — the store cannot reach the API');
+            setProductsError(true);
+            setProductsLoading(false);
+            return;
+        }
         setProductsLoading(true);
         setProductsError(false);
         try {

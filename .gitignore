@@ -39,3 +39,6 @@ Thumbs.db
 
 # Local-only scripts that write to the database
 test_regression.mjs
+
+# Local price backups from scripts/migrate-prices-inr.js
+backend/scripts/backups/

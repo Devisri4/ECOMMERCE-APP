@@ -36,33 +36,6 @@ storefront, a separate admin panel, and a REST API with Stripe payments and Clou
 - **Backend:** Node.js, Express 5, MongoDB with Mongoose 8, JWT, bcrypt, Multer
 - **Services:** Stripe Checkout, Cloudinary
 
-## Getting started
-
-Requires Node.js 20.19+ with npm, a MongoDB database, a Cloudinary account and a Stripe test key.
-
-```bash
-# Backend API (http://localhost:4000)
-cd backend
-cp .env.example .env    # then fill in your own values
-npm install
-npm run server
-
-# Storefront (http://localhost:5173)
-cd ../frontend
-cp .env.example .env
-npm install
-npm run dev
-
-# Admin panel (http://localhost:5174)
-cd ../admin
-cp .env.example .env
-npm install
-npm run dev
-```
-
-Sign in to the admin panel with the `ADMIN_EMAIL` and `ADMIN_PASSWORD` you set in `backend/.env`.
-For Stripe test payments, use card `4242 4242 4242 4242` with any future expiry date and any CVC.
-
 ## Environment variables
 
 Templates are provided in each app's `.env.example`. Never commit real `.env` files.

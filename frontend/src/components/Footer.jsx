@@ -28,7 +28,7 @@ const Footer = () => {
             <FooterColumn title='Shop'>
                 <li><Link to='/collection' className={linkClass}>All collections</Link></li>
                 <li><Link to='/cart' className={linkClass}>Cart</Link></li>
-                <li><Link to='/orders' className={linkClass}>My orders</Link></li>
+                <li><Link to='/account?tab=orders' className={linkClass}>My orders</Link></li>
             </FooterColumn>
             <FooterColumn title='Company'>
                 <li><Link to='/' className={linkClass}>Home</Link></li>

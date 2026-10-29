@@ -20,7 +20,13 @@ const findOrderable = async (itemId, size) => {
     return product && product.sizes.includes(size) ? product : null;
 };
 
-// ADD TO CART: one more of itemId in size
+// Field path of one bag line. Only built from a checked product id (24 hex) and a size like "M" or "XXL",
+// so the path can never point anywhere else in the document.
+const linePath = (itemId, size) => `cartData.${itemId}.${size}`;
+const isSize = (size) => typeof size === "string" && /^[A-Z]{1,4}$/.test(size);
+
+// ADD TO CART: one more of itemId in size. A single conditional $inc, so quick repeated clicks are all
+// counted and can never push a line past its limit (99, or the units left when stock is tracked).
 const addToCart = async (req, res) => {
     try {
         const userId = req.userId;
@@ -28,21 +34,26 @@ const addToCart = async (req, res) => {
         const product = await findOrderable(itemId, size);
         if (!product) return res.json({ success: false, message: INVALID_ITEM });
 
-        const userData = await userModel.findById(userId);
-        if (!userData) return res.json({ success: false, message: NOT_AUTHORIZED });
-        let cartData = userData.cartData || {};
-
-        if (!Object.hasOwn(cartData, itemId)) cartData[itemId] = {};
-        const current = Object.hasOwn(cartData[itemId], size) ? cartData[itemId][size] : 0;
-        if (current >= MAX_CART_QTY) {
-            return res.json({ success: false, message: `You can add up to ${MAX_CART_QTY} of each item.` });
-        }
         // The bag doesn't hold stock (checkout does), but it shouldn't offer more than is left
         const left = unitsLeft(product, size);
-        if (current + 1 > left) return res.json({ success: false, message: stockMessage(product.name, size, left) });
-        cartData[itemId][size] = current + 1;
+        const limit = Math.min(MAX_CART_QTY, left);
+        if (limit < 1) return res.json({ success: false, message: stockMessage(product.name, size, left) });
 
-        await userModel.findByIdAndUpdate(userId, { cartData });
+        const path = linePath(itemId, size);
+        const updated = await userModel.findOneAndUpdate(
+            { _id: userId, $or: [{ [path]: { $exists: false } }, { [path]: { $lt: limit } }] },
+            { $inc: { [path]: 1 } }
+        );
+        if (!updated) {
+            // Either the account is gone or the line is already at its limit: say which
+            const user = await userModel.findById(userId).select("cartData").lean();
+            if (!user) return res.json({ success: false, message: NOT_AUTHORIZED });
+            const current = user.cartData?.[itemId]?.[size] || 0;
+            return res.json({
+                success: false,
+                message: current >= MAX_CART_QTY ? `You can add up to ${MAX_CART_QTY} of each item.` : stockMessage(product.name, size, left),
+            });
+        }
 
         res.json({ success: true, message: "Added To Cart" });
     } catch (error) {
@@ -50,7 +61,7 @@ const addToCart = async (req, res) => {
     }
 };
 
-// UPDATE CART: set the quantity of itemId in size (0 removes it)
+// UPDATE CART: set the quantity of itemId in size (0 removes it). Only that one line is written.
 const updateCart = async (req, res) => {
     try {
         const userId = req.userId;
@@ -58,32 +69,29 @@ const updateCart = async (req, res) => {
         if (!Number.isInteger(quantity) || quantity < 0) {
             return res.json({ success: false, message: "Invalid item quantity" });
         }
-        if (!isProductId(itemId) || typeof size !== "string") return res.json({ success: false, message: INVALID_ITEM });
+        if (!isProductId(itemId) || !isSize(size)) return res.json({ success: false, message: INVALID_ITEM });
+        const path = linePath(itemId, size);
 
-        const userData = await userModel.findById(userId);
-        if (!userData) return res.json({ success: false, message: NOT_AUTHORIZED });
-        let cartData = userData.cartData || {};
-
-        if (quantity > 0) {
-            // Removing is always allowed (even for a product that has since been deleted); setting needs a real product
-            const product = await findOrderable(itemId, size);
-            if (!product) return res.json({ success: false, message: INVALID_ITEM });
-            if (!Object.hasOwn(cartData, itemId)) cartData[itemId] = {};
-            // Increases are capped at the units left; lowering a quantity that's now above stock is always allowed
-            const current = Object.hasOwn(cartData[itemId], size) ? cartData[itemId][size] : 0;
-            const left = unitsLeft(product, size);
-            if (quantity > left && quantity > current) {
-                return res.json({ success: false, message: stockMessage(product.name, size, left) });
-            }
-            cartData[itemId][size] = Math.min(quantity, MAX_CART_QTY);
-        } else if (Object.hasOwn(cartData, itemId)) {
-            delete cartData[itemId][size];
-            if (Object.keys(cartData[itemId]).length === 0) {
-                delete cartData[itemId];
-            }
+        if (quantity === 0) {
+            // Removing is always allowed (even for a product that has since been deleted)
+            const user = await userModel.findByIdAndUpdate(userId, { $unset: { [path]: "" } });
+            if (!user) return res.json({ success: false, message: NOT_AUTHORIZED });
+            return res.json({ success: true, message: "Cart Updated" });
         }
 
-        await userModel.findByIdAndUpdate(userId, { cartData });
+        // Setting a quantity needs a real product in that size
+        const product = await findOrderable(itemId, size);
+        if (!product) return res.json({ success: false, message: INVALID_ITEM });
+        const user = await userModel.findById(userId).select("cartData").lean();
+        if (!user) return res.json({ success: false, message: NOT_AUTHORIZED });
+
+        // Increases are capped at the units left; lowering a quantity that's now above stock is always allowed
+        const current = user.cartData?.[itemId]?.[size] || 0;
+        const left = unitsLeft(product, size);
+        if (quantity > left && quantity > current) {
+            return res.json({ success: false, message: stockMessage(product.name, size, left) });
+        }
+        await userModel.updateOne({ _id: userId }, { $set: { [path]: Math.min(quantity, MAX_CART_QTY) } });
         res.json({ success: true, message: "Cart Updated" });
     } catch (error) {
         sendServerError(res, error, "Couldn’t update your bag. Please try again.");

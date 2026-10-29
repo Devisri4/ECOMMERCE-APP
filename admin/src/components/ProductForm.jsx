@@ -1,16 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import { assets } from '../assets/assets';
+import { thumb } from '../utils/image';
 
 const SIZES = ["S", "M", "L", "XL", "XXL"];
 const labelClass = 'mb-2 block text-xs font-medium uppercase tracking-[0.14em] text-zinc-400';
 const cardClass = 'rounded-xl border border-zinc-800 bg-[#202024] p-5 sm:p-6';
-
-// Small Cloudinary thumbnail for previews (the stored URL is unchanged)
-const thumb = (url) =>
-  typeof url === 'string' && url.includes('res.cloudinary.com') && url.includes('/upload/') && !url.includes('/upload/f_auto')
-    ? url.replace('/upload/', '/upload/f_auto,q_auto,c_fill,w_200,h_200/')
-    : url;
 
 const EMPTY = { name: '', description: '', price: '', category: 'Men', subCategory: 'Topwear', bestseller: false, sizes: [], images: [], stock: {} };
 
@@ -91,16 +86,18 @@ const ProductForm = ({ initial = EMPTY, title, subtitle, submitLabel, submitting
         {subtitle && <p className='mt-1 text-sm text-zinc-400'>{subtitle}</p>}
       </div>
 
+      {/* In the read-only demo every control is disabled at once (a disabled fieldset disables all inputs inside) */}
+      <fieldset disabled={readOnly} className='flex min-w-0 flex-col gap-6'>
       <section className={cardClass}>
         <p className={labelClass}>Images <span className='normal-case tracking-normal text-zinc-400'>(up to 4, first is the cover; under 4 MB in total per save)</span></p>
         <div className='flex flex-wrap gap-3'>
           {slots.map((slot, i) => {
-            const src = previews[i] || thumb(slot.url);
+            const src = previews[i] || thumb(slot.url, 200, 200);
             return (
               <div key={i} className='relative'>
                 <label
                   htmlFor={`image${i + 1}`}
-                  className='group flex h-24 w-24 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-dashed border-zinc-700 bg-zinc-950/50 transition-colors hover:border-violet-400'
+                  className={`group flex h-24 w-24 items-center justify-center overflow-hidden rounded-lg border border-dashed border-zinc-700 bg-zinc-950/50 transition-colors focus-within:ring-2 focus-within:ring-violet-400 ${readOnly ? '' : 'cursor-pointer hover:border-violet-400'}`}
                 >
                   <img className={src ? 'h-full w-full object-cover' : 'w-12 opacity-60'} src={src || assets.upload_area} alt={src ? `Image ${i + 1} preview` : ''} />
                   <span className='sr-only'>{src ? `Replace image ${i + 1}` : `Upload image ${i + 1}`}</span>
@@ -116,7 +113,7 @@ const ProductForm = ({ initial = EMPTY, title, subtitle, submitLabel, submitting
                     className='sr-only'
                   />
                 </label>
-                {src && (
+                {src && !readOnly && (
                   <button
                     type='button'
                     onClick={() => setSlot(i, { file: null, url: null })}
@@ -211,6 +208,8 @@ const ProductForm = ({ initial = EMPTY, title, subtitle, submitLabel, submitting
           Feature as a bestseller
         </label>
       </section>
+
+      </fieldset>
 
       <div className='flex flex-wrap items-center gap-4'>
         <button type="submit" disabled={submitting || readOnly} className='rounded-md bg-violet-600 px-8 py-3 text-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60'>

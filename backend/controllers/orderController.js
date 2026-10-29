@@ -34,6 +34,9 @@ export const MAX_OPEN_COD_ORDERS = 10;   // cash-on-delivery orders not yet bein
 
 // Orders from the shared demo shopper always use this fictional address, so one visitor's real details
 // are never stored where the next visitor would see them. Demo orders also don't take real stock.
+// Owner of the generated sample orders (scripts/sample-orders.js); not a real account
+export const SAMPLE_USER_ID = "sample-data";
+
 export const DEMO_ORDER_ADDRESS = Object.freeze({
   firstName: "Demo", lastName: "Shopper", email: "demo@forever-store.example", street: "3rd Floor, Road No. 12, Banjara Hills",
   city: "Hyderabad", state: "Telangana", zipcode: "500034", country: "India", phone: "9000000000",
@@ -168,19 +171,38 @@ const paymentIntentId = (session) =>
   typeof session?.payment_intent === "string" ? session.payment_intent : session?.payment_intent?.id;
 
 // Refunds a payment that arrived for an order that had already been cancelled (its units were back on
-// sale). The idempotency key makes repeats (redirect + webhook) a single refund.
-const refundSession = async (session) => {
+// sale) and records the outcome on the order, so the admin can see it. The idempotency key makes repeats
+// (redirect, webhook, Stripe retries) a single refund. A failed refund is rethrown: the webhook then
+// answers 500 and Stripe retries it later.
+const refundSession = async (order, session) => {
+  const record = (refund) => orderModel.updateOne({ _id: order._id }, { refund });
   const intent = paymentIntentId(session);
   if (!stripe || !intent) {
     console.error("[stripe] Payment for a cancelled order needs a manual refund. Session:", session?.id);
+    await record("failed");
     return;
   }
   try {
     await stripe.refunds.create({ payment_intent: intent }, { idempotencyKey: `refund-cancelled-${intent}` });
+    await record("refunded");
     console.log("[stripe] Refunded payment for cancelled order", session.metadata?.orderId);
   } catch (err) {
-    if (err?.code !== "charge_already_refunded") console.error("[stripe] Automatic refund failed:", err.message);
+    if (err?.code === "charge_already_refunded") return record("refunded");
+    await record("failed");
+    console.error("[stripe] Automatic refund failed:", err.message);
+    throw err;
   }
+};
+
+// Removes this order's lines from the customer's bag (not the whole bag: a delayed payment can land days
+// later, after the bag was refilled). Ids and sizes are checked before becoming field paths.
+const clearOrderedLines = async (order) => {
+  const unset = Object.fromEntries(
+    (order.items || [])
+      .filter((i) => /^[a-f0-9]{24}$/i.test(String(i._id)) && /^[A-Z]{1,4}$/.test(String(i.size)))
+      .map((i) => [`cartData.${i._id}.${i.size}`, ""])
+  );
+  if (Object.keys(unset).length) await userModel.findByIdAndUpdate(order.userId, { $unset: unset });
 };
 
 // A confirmed card payment. The order is marked paid only while it is still unpaid and not cancelled, in
@@ -193,12 +215,12 @@ export const settlePaidOrder = async (order, session) => {
     { new: true }
   );
   if (paid) {
-    await userModel.findByIdAndUpdate(order.userId, { cartData: {} });
+    await clearOrderedLines(order);
     return "paid";
   }
   const current = await orderModel.findById(order._id).lean();
   if (current?.payment) return "paid"; // recorded a moment ago by another path
-  await refundSession(session);
+  await refundSession(order, session);
   return "refunded";
 };
 
@@ -215,7 +237,14 @@ const asyncPaymentFailed = async (session) => {
 // (still payable, e.g. Stripe couldn't be reached — the caller must not cancel then).
 const closeCheckout = async (order) => {
   if (!stripe || order.paymentMethod !== "Stripe" || !order.stripeSessionId) return { state: "closed" };
-  let session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
+  let session;
+  try {
+    session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
+  } catch (err) {
+    // A session Stripe no longer knows (e.g. created with another API key) can't be paid
+    if (err?.code === "resource_missing") return { state: "closed" };
+    throw err;
+  }
   if (session.status === "open") {
     try {
       session = await stripe.checkout.sessions.expire(session.id);
@@ -301,6 +330,7 @@ const placeOrder = async (req, res) => {
       address: cleanAddress,
       amount,
       paymentMethod: "COD",
+      holdsStock: !demo,
       currency: ORDER_CURRENCY,
       payment: false,
       date: Date.now(),
@@ -338,6 +368,7 @@ const placeOrderStripe = async (req, res) => {
       address: cleanAddress,
       amount,
       paymentMethod: "Stripe",
+      holdsStock: !demo,
       currency: ORDER_CURRENCY,
       payment: false,
       date: Date.now(),
@@ -432,9 +463,9 @@ const verifyStripe = async (req, res) => {
     }
 
     // Cancelled on the payment page or abandoned: close the checkout first, then remove the order
-    const { state } = await closeCheckout(order);
+    const { state, session: latest } = await closeCheckout(order);
     if (state === "paid") {
-      await settlePaidOrder(order, session);
+      await settlePaidOrder(order, latest || session);
       return res.redirect(successUrl);
     }
     if (state === "processing") return res.redirect(frontend + "/orders"); // payment still going through
@@ -641,7 +672,11 @@ const updateStatus = async (req, res) => {
       await releaseStock(previous.items); // only the request that cancelled it gives the units back
     } else if (wasCancelled && !nowCancelled) {
       // Re-opening a cancelled order takes its units again, which fails if they have been sold since
-      const items = await reserveStock(order.items.map(({ stockReserved, ...item }) => item)); // eslint-disable-line no-unused-vars
+      // Demo and sample orders never take real stock
+      const takesStock = order.holdsStock !== false && order.userId !== SAMPLE_USER_ID;
+      const items = takesStock
+        ? await reserveStock(order.items.map(({ stockReserved, ...item }) => item)) // eslint-disable-line no-unused-vars
+        : order.items;
       const reopened = await orderModel.findOneAndUpdate(unchanged, { ...update, items });
       if (!reopened) {
         await releaseStock(items);

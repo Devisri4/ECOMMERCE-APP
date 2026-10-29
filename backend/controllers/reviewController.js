@@ -4,6 +4,7 @@ import productModel from "../models/productModel.js";
 import orderModel from "../models/orderModel.js";
 import userModel from "../models/userModel.js";
 import { sendServerError } from "../utils/http.js";
+import { isDemoCustomer } from "./userController.js";
 
 export const MAX_COMMENT = 1000;
 const LIST_LIMIT = 50;
@@ -44,13 +45,14 @@ const refreshProductRating = async (productId) => {
     return summary;
 };
 
-// Orders store the product id as an ObjectId (or a string on very old orders). A card order only counts
-// once it is paid, so an abandoned checkout doesn't earn the "Verified buyer" badge.
+// Orders store the product id as an ObjectId (or a string on very old orders). Only a paid order counts
+// (card orders once paid, cash on delivery once delivered), and a paid order can't be cancelled, so the
+// "Verified buyer" badge can't be earned and then kept by cancelling.
 const hasOrdered = (userId, productId) =>
     orderModel.exists({
         userId: String(userId),
         status: { $ne: "Cancelled" },
-        $or: [{ paymentMethod: "COD" }, { payment: true }],
+        payment: true,
         "items._id": { $in: [productId, new mongoose.Types.ObjectId(productId)] },
     });
 
@@ -94,12 +96,13 @@ const addReview = async (req, res) => {
 
         const [product, user] = await Promise.all([
             productModel.exists({ _id: productId }),
-            userModel.findById(req.userId).select("name"),
+            userModel.findById(req.userId).select("name email"),
         ]);
         if (!product) return res.json({ success: false, message: "Product not found" });
         if (!user) return res.json({ success: false, message: "Not Authorized Login Again" });
 
-        const verified = Boolean(await hasOrdered(req.userId, productId));
+        // The shared demo shopper's orders are free to place, so its reviews are never "verified"
+        const verified = !isDemoCustomer(user) && Boolean(await hasOrdered(req.userId, productId));
         await reviewModel.updateOne(
             { productId, userId: String(req.userId) },
             { $set: { rating, comment, verified, name: displayName(user.name), date: Date.now() } },

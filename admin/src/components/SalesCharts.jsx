@@ -138,7 +138,7 @@ const DailyChart = ({ data }) => {
               <g key={d.date}>
                 {h > 0 && <path d={columnPath(x, y(d.value), barW, h)} fill={i === active ? BAR_ACTIVE : BAR} />}
                 {/* Hit target: the whole slot, full height, so short columns are easy to hover */}
-                <rect x={pad.left + i * slot} y={pad.top} width={slot} height={plotH} fill='transparent' onPointerMove={() => setActive(i)} />
+                <rect x={pad.left + i * slot} y={pad.top} width={slot} height={plotH} fill='transparent' onPointerMove={() => setActive(i)} onPointerDown={() => setActive(i)} />
               </g>
             )
           })}
@@ -162,9 +162,14 @@ const DailyChart = ({ data }) => {
         </svg>
       )}
 
+      {/* Always present, so screen readers announce each day as the arrow keys move (the visual box below is decoration) */}
+      <p role='status' className='sr-only'>
+        {tip ? `${dayLabel(tip.date)}: ${formatPrice(tip.value, 'INR')}, ${tip.orders} ${tip.orders === 1 ? 'order' : 'orders'}` : ''}
+      </p>
+
       {tip && (
         <div
-          role='status'
+          aria-hidden='true'
           className='pointer-events-none absolute top-0 z-10 -translate-x-1/2 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs shadow-lg'
           style={{ left: tipLeft }}
         >
@@ -207,7 +212,8 @@ const SalesCharts = ({ orders }) => {
 
   const { daily, top, total, count } = useMemo(() => {
     const since = rangeStart(days)
-    const inRange = orders.filter((o) => o.status !== 'Cancelled' && (o.currency || 'USD') === 'INR' && o.date >= since)
+    // Card orders still waiting for payment may never be paid, so they are not counted as sales yet
+    const inRange = orders.filter((o) => o.status !== 'Cancelled' && !(o.paymentMethod === 'Stripe' && !o.payment) && (o.currency || 'USD') === 'INR' && o.date >= since)
     const byProduct = new Map()
     for (const o of inRange) {
       for (const item of o.items) {
@@ -250,7 +256,7 @@ const SalesCharts = ({ orders }) => {
         <div className='rounded-xl border border-zinc-800 bg-[#202024] p-5'>
           <h3 className='text-sm font-medium text-white'>Order value per day</h3>
           <p className='mt-1 text-xs text-zinc-400'>
-            {formatPrice(total, 'INR')} from {count} {count === 1 ? 'order' : 'orders'} · excludes cancelled orders
+            {formatPrice(total, 'INR')} from {count} {count === 1 ? 'order' : 'orders'} · excludes cancelled and unpaid card orders
           </p>
           <div className='mt-5'>
             {count === 0 ? (

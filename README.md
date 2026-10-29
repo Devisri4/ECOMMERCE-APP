@@ -25,7 +25,7 @@ This is a portfolio project: orders aren't shipped and the dashboard shows sampl
 - **Checkout:** cash on delivery or Stripe, with prices and stock checked on the server
 - **Admin:** sales dashboard with charts, product and stock management, order status updates
 - **Security:** role-based JWT auth, rate limiting, input validation, a read-only demo role that hides customer details
-- **Quality:** 70 backend tests and lint/build checks on every push (GitHub Actions)
+- **Quality:** automated backend tests plus lint and build checks on every push (GitHub Actions)
 
 ## Tech stack
 

@@ -42,7 +42,7 @@ const Contact = () => {
 
             <ContactBlock title='Your orders'>
               <p>Track an order or cancel one before it ships from your account.</p>
-              <Link to='/orders' className={`${linkClass} self-start`}>View my orders</Link>
+              <Link to='/account?tab=orders' className={`${linkClass} self-start`}>View my orders</Link>
             </ContactBlock>
 
             <ContactBlock title='Returns'>

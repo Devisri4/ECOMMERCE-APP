@@ -35,6 +35,29 @@ const parseStock = (value, sizes) => {
     return { stock }
 }
 
+// Turns "the form loaded `before`, the admin saved `after`" into one MongoDB update: tracked sizes change
+// by the difference ($inc), newly tracked sizes are set, sizes no longer tracked are removed. A decrease
+// also requires enough units to be left, so stock can't go below zero. Returns { filter, update } (update
+// is null when nothing changed).
+export const stockChange = (before = {}, after = {}) => {
+    const filter = {}, $inc = {}, $set = {}, $unset = {}
+    for (const size of SIZES) {
+        const path = `stock.${size}`
+        const had = Object.hasOwn(before, size), has = Object.hasOwn(after, size)
+        if (had && has) {
+            const delta = after[size] - before[size]
+            if (delta !== 0) $inc[path] = delta
+            if (delta < 0) filter[path] = { $gte: -delta }
+        } else if (has) {
+            $set[path] = after[size]
+        } else if (had) {
+            $unset[path] = ""
+        }
+    }
+    const update = Object.fromEntries(Object.entries({ $inc, $set, $unset }).filter(([, ops]) => Object.keys(ops).length))
+    return { filter, update: Object.keys(update).length ? update : null }
+}
+
 // Shared by add + update. Returns { error } or { fields } with cleaned values.
 // Prices are whole rupees (INR), the store currency. `stock` is optional: when it isn't sent at all,
 // fields.stock is left out so an update keeps the current stock levels.
@@ -156,13 +179,29 @@ const updateProduct = async (req, res) => {
             return res.json({ success: false, message: "Image uploads are not configured on the server" })
         }
 
+        // Stock: when the form says what it loaded (stockBase), only the admin's change is applied, so units
+        // ordered while the form was open aren't overwritten. Done first, so a conflict changes nothing.
+        let { stock, ...otherFields } = fields
+        if (stock !== undefined && req.body.stockBase !== undefined) {
+            const base = parseStock(req.body.stockBase, SIZES)
+            if (base.error) return res.json({ success: false, message: base.error })
+            const { filter, update } = stockChange(base.stock, stock)
+            if (update) {
+                const applied = await productModel.updateOne({ _id: product._id, ...filter }, update)
+                if (applied.matchedCount === 0) {
+                    return res.json({ success: false, message: "Stock changed while you were editing (an order took some units). Reload the page and check the numbers." })
+                }
+            }
+            stock = undefined
+        }
+
         // Each slot: newly uploaded file > kept existing URL > empty
         const slots = await Promise.all(files.map((file, i) => (file ? uploadImageBuffer(file) : kept[i])))
 
-        Object.assign(product, fields, { image: slots.filter(Boolean) })
+        Object.assign(product, otherFields, stock !== undefined ? { stock } : {}, { image: slots.filter(Boolean) })
         await product.save()
 
-        res.json({ success: true, message: "Product Updated", product })
+        res.json({ success: true, message: "Product Updated", product: await productModel.findById(product._id) })
     } catch (error) {
         sendServerError(res, error, "Couldn't update the product. Please try again.")
     }

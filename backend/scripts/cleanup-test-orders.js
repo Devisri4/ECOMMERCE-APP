@@ -81,7 +81,8 @@ const main = async () => {
     const removed = await orderModel.findOneAndDelete({ _id: o._id, status: o.status, payment: o.payment, amount: o.amount });
     if (!removed) { skipped++; continue; }
     deleted++;
-    if (removed.status !== "Cancelled") {
+    // Cancelled orders already gave their units back; delivered ones left the warehouse
+    if (removed.status !== "Cancelled" && removed.status !== "Delivered") {
       for (const item of (removed.items || []).filter((i) => i.stockReserved)) {
         const stockPath = `stock.${item.size}`;
         await productModel.updateOne({ _id: item._id, [stockPath]: { $exists: true } }, { $inc: { [stockPath]: item.quantity } });

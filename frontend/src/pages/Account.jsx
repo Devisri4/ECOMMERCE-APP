@@ -236,8 +236,10 @@ const Account = () => {
   const [status, setStatus] = useState('loading') // loading | ready | error
   const [errorMessage, setErrorMessage] = useState('')
 
+  // Quiet refresh when a profile is already shown (e.g. the new token after a password change),
+  // so the panel doesn't blank out and keyboard focus isn't lost
   const loadProfile = async () => {
-    setStatus('loading')
+    if (!profile) setStatus('loading')
     try {
       const res = await axios.post(backendUrl + '/api/user/profile', {}, { headers: { token } })
       if (res.data.success) {
@@ -255,7 +257,9 @@ const Account = () => {
 
   useEffect(() => {
     if (!token) {
-      navigate('/login?redirect=/account', { replace: true })
+      // Back to the same tab after signing in (e.g. "My orders" from the footer)
+      const target = tab === 'overview' ? '/account' : `/account?tab=${tab}`
+      navigate(`/login?redirect=${encodeURIComponent(target)}`, { replace: true })
       return
     }
     loadProfile()

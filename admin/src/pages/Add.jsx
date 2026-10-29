@@ -38,8 +38,8 @@ const Add = ({token, demo = false})=>{
 
   return (
     <ProductForm
-      title='Add product'
-      subtitle='New products appear in the store immediately.'
+      title={demo ? 'Add product (demo)' : 'Add product'}
+      subtitle={demo ? 'Read-only demo: this form shows what the admin fills in, but it can’t be saved.' : 'New products appear in the store immediately.'}
       submitLabel='Add product'
       submittingLabel='Adding product…'
       onSubmit={onSubmit}

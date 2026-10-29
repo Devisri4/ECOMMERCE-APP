@@ -6,6 +6,7 @@ import { backendUrl } from '../App'
 import { formatPrice, orderCurrency } from '../utils/currency'
 import { formatDate } from '../utils/date'
 import { DEMO_DISABLED } from '../utils/session'
+import { thumb } from '../utils/image'
 
 const STATUSES = ['Order Placed', 'Packing', 'Shipped', 'Out for delivery', 'Delivered', 'Cancelled']
 
@@ -18,9 +19,12 @@ const Orders = ({ token, demo = false }) => {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false) // a failed load must not look like "no orders"
-  const [updatingId, setUpdatingId] = useState(null)
+  // Orders with a status change in flight (several can be pending at once)
+  const [updating, setUpdating] = useState(() => new Set())
+  const markUpdating = (id, on) => setUpdating((prev) => { const next = new Set(prev); if (on) next.add(id); else next.delete(id); return next })
 
-  const fetchAllOrders = async () => {
+  // keepOnError: a refresh after a status change that fails keeps the list on screen (with a toast)
+  const fetchAllOrders = async ({ keepOnError = false } = {}) => {
     try {
       if (!token) return
 
@@ -33,33 +37,36 @@ const Orders = ({ token, demo = false }) => {
       if (response.data.success) {
         setOrders(response.data.orders) // the API returns newest first
         setLoadError(false)
+      } else if (keepOnError) {
+        toast.error('Couldn’t refresh the order list.', { toastId: 'orders-refresh' })
       } else {
         setLoadError(true)
       }
     } catch (error) {
       console.error(error)
-      setLoadError(true)
+      if (keepOnError) toast.error('Couldn’t refresh the order list.', { toastId: 'orders-refresh' })
+      else setLoadError(true)
     } finally {
       setLoading(false)
     }
   }
 
   const statusHandler = async (event, orderId ) => {
-    setUpdatingId(orderId)
+    markUpdating(orderId, true)
     try {
       const response = await axios.post(backendUrl + '/api/order/status' , {orderId, status:event.target.value}, {headers: {token}})
       if (response.data.success) {
         toast.success('Order status updated.')
-        await fetchAllOrders()
+        await fetchAllOrders({ keepOnError: true })
       } else {
         toast.error(friendlyError(response.data.message, "Couldn’t update the order status. Please try again."))
-        await fetchAllOrders() // e.g. "changed a moment ago": show the order as it is now
+        await fetchAllOrders({ keepOnError: true }) // e.g. "changed a moment ago": show the order as it is now
       }
     } catch (error) {
       console.error(error)
       toast.error(friendlyError(error, 'Couldn’t update the order status. Please try again.'))
     } finally {
-      setUpdatingId(null)
+      markUpdating(orderId, false)
     }
   }
 
@@ -70,11 +77,15 @@ const Orders = ({ token, demo = false }) => {
   return (
     <div>
       <h1 className="text-2xl font-semibold text-white">Orders</h1>
+      {demo && <p className="mt-3 text-xs text-amber-300">Read-only demo: order statuses can’t be changed here.</p>}
       <p className="mt-1 text-sm text-zinc-400">{loading ? 'Loading…' : loadError ? 'Orders couldn’t be loaded' : `${orders.length} orders, newest first`}</p>
 
       <div className="mt-6 flex flex-col gap-4">
         {loading ? (
-          [0, 1].map((i) => <div key={i} aria-hidden="true" className="h-40 animate-pulse rounded-xl border border-zinc-800 bg-zinc-800/40" />)
+          <div role="status" className="flex flex-col gap-4">
+            <span className="sr-only">Loading orders…</span>
+            {[0, 1].map((i) => <div key={i} aria-hidden="true" className="h-40 animate-pulse rounded-xl border border-zinc-800 bg-zinc-800/40" />)}
+          </div>
         ) : loadError ? (
           <div role="alert" className="rounded-xl border border-zinc-800 bg-[#202024] p-10 text-center">
             <p className="text-sm text-zinc-400">Couldn’t load orders.</p>
@@ -96,7 +107,7 @@ const Orders = ({ token, demo = false }) => {
               <ul className="mt-3 flex flex-col gap-2">
                 {order.items.map((item, i) => (
                   <li key={i} className="flex items-center gap-3">
-                    <img src={item.image?.[0]} alt="" className="h-12 w-10 shrink-0 rounded bg-zinc-800 object-cover" loading="lazy" />
+                    <img src={thumb(item.image?.[0], 80, 96)} alt="" className="h-12 w-10 shrink-0 rounded bg-zinc-800 object-cover" loading="lazy" />
                     <span className="text-zinc-200">
                       {item.name} <span className="text-zinc-400">× {item.quantity} · {item.size}</span>
                     </span>
@@ -120,6 +131,11 @@ const Orders = ({ token, demo = false }) => {
               <p className={order.payment ? 'text-emerald-300' : 'text-amber-300'}>
                 {order.payment ? 'Paid' : order.paymentMethod === 'COD' ? 'Collect on delivery' : 'Card payment not completed'}
               </p>
+              {/* A card payment that arrived after the order was cancelled is refunded automatically */}
+              {order.refund === 'failed' && (
+                <p className="mt-1 text-red-300">Paid after cancelling: automatic refund failed. Refund it in the Stripe dashboard.</p>
+              )}
+              {order.refund === 'refunded' && <p className="mt-1 text-zinc-400">Late payment refunded automatically.</p>}
               <p className="mt-1">{formatDate(order.date)}</p>
             </div>
 
@@ -130,7 +146,7 @@ const Orders = ({ token, demo = false }) => {
                 id={`status-${order._id}`}
                 onChange={(event)=>statusHandler(event,order._id)}
                 value={order.status}
-                disabled={demo || updatingId === order._id}
+                disabled={demo || updating.has(order._id)}
                 title={demo ? DEMO_DISABLED : undefined}
                 className="w-full px-3 py-2.5 font-medium disabled:opacity-60"
               >

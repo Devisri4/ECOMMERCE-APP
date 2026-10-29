@@ -8,6 +8,7 @@
 import "dotenv/config";
 import fs from "fs";
 import path from "path";
+import { pathToFileURL } from "url";
 import mongoose from "mongoose";
 import productModel from "../models/productModel.js";
 import { DEFAULT_DB_NAME } from "../config/mongodb.js";
@@ -29,7 +30,7 @@ const main = async () => {
     const dir = path.join("scripts", "backups");
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, `prices-usd-${new Date().toISOString().slice(0, 10)}.json`);
-    fs.writeFileSync(file, JSON.stringify(rows, null, 2));
+    fs.writeFileSync(file, JSON.stringify(rows, null, 2), { flag: "wx" }); // never overwrite an earlier backup
     console.table(rows.map(({ name, usd, inr }) => ({ name, usd, inr })));
     console.log(`Preview only — nothing written to MongoDB. Backup: ${file}`);
     return;
@@ -46,6 +47,9 @@ const main = async () => {
   console.log(`Updated ${updated} products, skipped ${skipped} (already converted or edited since the backup).`);
 };
 
-main()
-  .catch((err) => { console.error(err.message); process.exitCode = 1; })
-  .finally(() => mongoose.disconnect());
+// Already applied on 2026-10-27; runs only from the command line (importing it does nothing)
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  main()
+    .catch((err) => { console.error(err.message); process.exitCode = 1; })
+    .finally(() => mongoose.disconnect());
+}

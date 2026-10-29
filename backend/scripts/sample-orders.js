@@ -13,9 +13,9 @@ import mongoose from "mongoose";
 import orderModel from "../models/orderModel.js";
 import productModel from "../models/productModel.js";
 import { DEFAULT_DB_NAME } from "../config/mongodb.js";
-import { deliveryCharge, ORDER_CURRENCY } from "../controllers/orderController.js";
+import { deliveryCharge, ORDER_CURRENCY, SAMPLE_USER_ID } from "../controllers/orderController.js";
 
-export const SAMPLE_USER_ID = "sample-data";
+export { SAMPLE_USER_ID };
 export const SAMPLE_COUNT = 25;
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -90,6 +90,7 @@ export const buildSampleOrders = (products, now = Date.now(), seed = 2026) => {
       payment: paymentMethod === "Stripe" ? status !== "Cancelled" : status === "Delivered",
       date,
       currency: ORDER_CURRENCY,
+      holdsStock: false,
     };
   });
 };

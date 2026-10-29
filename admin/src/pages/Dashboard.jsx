@@ -52,7 +52,8 @@ const Dashboard = ({ token }) => {
   const stats = data && [
     { label: 'Products', value: data.products.length, hint: `${data.products.filter((p) => p.bestseller).length} bestsellers` },
     { label: 'Orders', value: active.length, hint: `${orders.length - active.length} cancelled` },
-    { label: 'Awaiting fulfilment', value: active.filter((o) => o.status !== 'Delivered').length, hint: 'Not yet delivered' },
+    // An unpaid card order isn't ready to fulfil until the payment arrives
+    { label: 'Awaiting fulfilment', value: active.filter((o) => o.status !== 'Delivered' && !(o.paymentMethod === 'Stripe' && !o.payment)).length, hint: 'Not yet delivered' },
     {
       // Never add rupees and dollars together: INR is the headline, pre-INR (USD) revenue is shown separately
       label: 'Paid revenue',

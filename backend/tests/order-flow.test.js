@@ -51,25 +51,32 @@ orderModel.updateOne = async (filter, update) => {
 };
 orderModel.prototype.save = async function () { db.orders[String(this._id)] = this.toObject(); return this; };
 userModel.findById = (id) => query(copy(db.users[String(id)]));
-userModel.findByIdAndUpdate = async (id, update) => { calls.cartCleared.push(String(id)); Object.assign(db.users[String(id)] || {}, update); };
+userModel.findByIdAndUpdate = async (id, update) => { calls.cartCleared.push(String(id)); calls.cartUpdates.push(update); };
 productModel.updateOne = async (filter, update) => { calls.stock.push({ filter, update }); return { modifiedCount: 1 }; };
 productModel.find = () => query(Object.values(db.products));
 
 // ---------- Stripe stand-in ----------
-stripe.checkout.sessions.retrieve = async (id) => copy(db.sessions[id]);
+stripe.checkout.sessions.retrieve = async (id) => {
+  if (!db.sessions[id]) throw Object.assign(new Error("No such checkout session"), { code: "resource_missing" });
+  return copy(db.sessions[id]);
+};
 stripe.checkout.sessions.expire = async (id) => {
   if (db.expireFails) throw new Error("Stripe unavailable");
   db.sessions[id].status = "expired";
   return copy(db.sessions[id]);
 };
 stripe.paymentIntents.retrieve = async (id) => ({ id, status: db.intentStatus || "processing" });
-stripe.refunds.create = async (params, opts) => { calls.refunds.push({ params, opts }); return { id: "re_1" }; };
+stripe.refunds.create = async (params, opts) => {
+  if (db.refundFails) throw Object.assign(new Error("Stripe unavailable"), { code: "api_error" });
+  calls.refunds.push({ params, opts });
+  return { id: "re_1" };
+};
 
 const ORDER = "65f1c0ffee0000000000aaaa";
 const USER = "65f1c0ffee0000000000bbbb";
 const cardOrder = (over = {}) => ({
   _id: ORDER, userId: USER, paymentMethod: "Stripe", payment: false, status: "Order Placed", stripeSessionId: "cs_1",
-  amount: 1298, items: [{ _id: "p1", name: "Tee", size: "M", quantity: 1, price: 1199, stockReserved: true }], ...over,
+  amount: 1298, items: [{ _id: "65f1c0ffee0000000000cccc", name: "Tee", size: "M", quantity: 1, price: 1199, stockReserved: true }], ...over,
 });
 const session = (over = {}) => ({ id: "cs_1", status: "open", payment_status: "unpaid", payment_intent: "pi_1", metadata: { orderId: ORDER }, ...over });
 const mockRes = () => ({ body: null, redirected: null, statusCode: 200,
@@ -77,7 +84,7 @@ const mockRes = () => ({ body: null, redirected: null, statusCode: 200,
 
 beforeEach(() => {
   db = { orders: { [ORDER]: cardOrder() }, users: { [USER]: { _id: USER, email: "shopper@example.com", cartData: { x: 1 } } }, sessions: { cs_1: session() }, products: {} };
-  calls = { refunds: [], cartCleared: [], stock: [] };
+  calls = { refunds: [], cartCleared: [], cartUpdates: [], stock: [] };
 });
 
 // ---------- settle / refund ----------
@@ -85,6 +92,8 @@ test("a confirmed payment marks an open order paid and empties the bag", async (
   assert.equal(await oc.settlePaidOrder(db.orders[ORDER], session({ payment_status: "paid" })), "paid");
   assert.equal(db.orders[ORDER].payment, true);
   assert.deepEqual(calls.cartCleared, [USER]);
+  // Only this order's line leaves the bag, not anything added since
+  assert.deepEqual(calls.cartUpdates, [{ $unset: { "cartData.65f1c0ffee0000000000cccc.M": "" } }]);
   assert.equal(calls.refunds.length, 0);
 });
 
@@ -196,4 +205,36 @@ test("orders are capped at 30 pieces", async () => {
   const res = mockRes();
   await oc.placeOrder({ userId: USER, body: { items: [{ _id: "65f1c0ffee0000000000cccc", size: "M", quantity: 31 }] } }, res);
   assert.match(res.body.message, /up to 30 pieces/);
+});
+
+test("a failed automatic refund is recorded on the order and rethrown, so Stripe retries the webhook", async () => {
+  db.orders[ORDER].status = "Cancelled";
+  db.refundFails = true;
+  await assert.rejects(oc.settlePaidOrder(db.orders[ORDER], session({ payment_status: "paid" })), /Stripe unavailable/);
+  assert.equal(db.orders[ORDER].refund, "failed");
+  assert.equal(db.orders[ORDER].payment, false);
+
+  db.refundFails = false;
+  assert.equal(await oc.settlePaidOrder(db.orders[ORDER], session({ payment_status: "paid" })), "refunded");
+  assert.equal(db.orders[ORDER].refund, "refunded");
+});
+
+test("an order whose Stripe session no longer exists can still be cancelled", async () => {
+  delete db.sessions.cs_1;
+  const res = mockRes();
+  await oc.updateStatus({ body: { orderId: ORDER, status: "Cancelled" } }, res);
+  assert.equal(res.body.success, true, res.body.message);
+  assert.equal(db.orders[ORDER].status, "Cancelled");
+});
+
+test("re-opening a cancelled sample or demo order never takes real stock", async () => {
+  for (const over of [{ userId: oc.SAMPLE_USER_ID }, { holdsStock: false }]) {
+    db.orders[ORDER] = cardOrder({ paymentMethod: "COD", payment: false, status: "Cancelled", stripeSessionId: undefined, ...over });
+    calls.stock = [];
+    const res = mockRes();
+    await oc.updateStatus({ body: { orderId: ORDER, status: "Order Placed" } }, res);
+    assert.equal(res.body.success, true, res.body.message);
+    assert.equal(db.orders[ORDER].status, "Order Placed");
+    assert.equal(calls.stock.length, 0);
+  }
 });

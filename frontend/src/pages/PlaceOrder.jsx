@@ -37,7 +37,8 @@ const PlaceOrder = () => {
     delivery_fee,
     products,
     productsLoading,
-    cartLoaded
+    cartLoaded,
+    user
   } = useContext(ShopContext)
 
   // Bag lines for products that still exist (deleted products are skipped, as on the Cart page)
@@ -48,18 +49,11 @@ const PlaceOrder = () => {
   const [formData, setFormData] = useState(EMPTY_ADDRESS)
   const [savedAddresses, setSavedAddresses] = useState([])
   const [saveAddress, setSaveAddress] = useState(false)
-  const [demo, setDemo] = useState(false) // shared demo shopper: the server stores a sample address instead
-
+  // Shared demo shopper (from the profile the shop context already loaded): the server stores a sample address
+  const demo = Boolean(user?.demo)
   useEffect(() => {
-    if (!token) return
-    axios.post(backendUrl + '/api/user/profile', {}, { headers: { token } })
-      .then((res) => {
-        if (!res.data.success || !res.data.user.demo) return
-        setDemo(true)
-        setFormData(DEMO_ADDRESS)
-      })
-      .catch(() => {})
-  }, [token, backendUrl])
+    if (demo) setFormData(DEMO_ADDRESS)
+  }, [demo])
 
   // Checkout needs an account: send guests to the customer login, then back here.
   // The guest cart stays in localStorage and is merged into the account cart on login.

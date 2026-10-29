@@ -26,7 +26,11 @@ select:focus-visible,input:focus-visible,textarea:focus-visible{
   box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.35);
 }
 input::placeholder,textarea::placeholder{
-  color: #71717a;
+  color: #8b8b94; /* 4.5:1 on the #0f0f11 field */
+}
+select:disabled,input:disabled,textarea:disabled{
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 :focus-visible {
   outline: 2px solid #a78bfa;

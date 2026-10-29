@@ -9,12 +9,13 @@ import { LOW_STOCK, isSoldOut, unitsLeft } from '../utils/stock';
 import Stars from '../components/Stars';
 import ProductReviews from '../components/ProductReviews';
 import WishlistButton from '../components/WishlistButton';
+import { STORE_INFO } from '../utils/storeInfo';
 
 // Store policies already stated across the site (footer/policy strip) — no invented claims.
 const DELIVERY_NOTES = [
   '100% original product.',
   'Cash on delivery is available on this product.',
-  'Easy return and exchange policy within 7 days of delivery.',
+  `Easy return and exchange policy within ${STORE_INFO.returnDays} days of delivery.`,
 ];
 
 // Sizes are stored in whatever order the admin clicked them; show them smallest → largest
@@ -204,7 +205,7 @@ const Product = () => {
             <button type='button' onClick={onAdd} disabled={soldOut} className='btn-primary flex-1 py-4' aria-live='polite'>
               {soldOut ? 'Sold out' : justAdded ? 'Added to bag' : 'Add to bag'}
             </button>
-            {!justAdded && <WishlistButton productId={productData._id} productName={productData.name} variant='full' />}
+            <WishlistButton productId={productData._id} productName={productData.name} variant='full' />
             {justAdded && <Link to='/cart' className='btn-secondary py-4'>View bag</Link>}
           </div>
 
@@ -223,7 +224,8 @@ const Product = () => {
         </div>
       </div>
 
-      <ProductReviews productId={productData._id} />
+      {/* Keyed by product: switching products starts the reviews fresh, so a slow save can't land on the next one */}
+      <ProductReviews key={productData._id} productId={productData._id} />
 
       {/* Related products */}
       <RelatedProducts category={productData.category} subCategory={productData.subCategory} currentId={productData._id} />

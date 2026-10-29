@@ -7,15 +7,17 @@ import { initialsOf } from '../utils/initials';
 const itemClass = 'block w-full px-4 py-2.5 text-left text-sm text-neutral-700 transition-colors hover:bg-neutral-100 hover:text-ink';
 
 // Header account control. Signed out: the person icon, linking to sign-in. Signed in: a round badge with
-// the shopper's initials that opens a small menu (Escape, an outside click or choosing an item closes it).
+// the shopper's initials that shows a small list of links (a disclosure: Escape, an outside click, choosing a
+// link or tabbing out of it closes it).
 const AccountMenu = ({ iconButton }) => {
   const { token, user, logout } = useContext(ShopContext);
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const buttonRef = useRef(null);
-  const { pathname, search } = useLocation();
+  const location = useLocation();
 
-  useEffect(() => setOpen(false), [pathname, search]);
+  // Close after any navigation, including a click on the page that is already open
+  useEffect(() => setOpen(false), [location.key]);
 
   useEffect(() => {
     if (!open) return;
@@ -45,13 +47,13 @@ const AccountMenu = ({ iconButton }) => {
   const initials = initialsOf(user?.name);
 
   return (
-    <div ref={wrapRef} className='relative'>
+    <div ref={wrapRef} className='relative' onBlur={(e) => !wrapRef.current?.contains(e.relatedTarget) && setOpen(false)}>
       <button
         ref={buttonRef}
         type='button'
         onClick={() => setOpen((v) => !v)}
-        aria-haspopup='menu'
         aria-expanded={open}
+        aria-controls='account-menu'
         aria-label={user ? `Account menu for ${user.name}` : 'Account menu'}
         className={iconButton}
       >
@@ -65,7 +67,7 @@ const AccountMenu = ({ iconButton }) => {
       </button>
 
       {open && (
-        <div role='menu' className='absolute right-0 top-full z-50 mt-2 w-60 border border-neutral-200 bg-white py-2 shadow-lg'>
+        <div id='account-menu' className='absolute right-0 top-full z-50 mt-2 w-60 border border-neutral-200 bg-white py-2 shadow-lg'>
           {user && (
             <div className='border-b border-neutral-200 px-4 pb-3 pt-1'>
               <p className='truncate text-sm font-medium text-ink'>{user.name}</p>
@@ -73,12 +75,12 @@ const AccountMenu = ({ iconButton }) => {
             </div>
           )}
           <div className='py-1'>
-            <Link role='menuitem' to='/account' className={itemClass}>My account</Link>
-            <Link role='menuitem' to='/account?tab=orders' className={itemClass}>My orders</Link>
-            <Link role='menuitem' to='/account?tab=wishlist' className={itemClass}>Wishlist</Link>
+            <Link to='/account' className={itemClass}>My account</Link>
+            <Link to='/account?tab=orders' className={itemClass}>My orders</Link>
+            <Link to='/account?tab=wishlist' className={itemClass}>Wishlist</Link>
           </div>
           <div className='border-t border-neutral-200 pt-1'>
-            <button role='menuitem' type='button' onClick={() => { setOpen(false); logout(); }} className={itemClass}>
+            <button type='button' onClick={() => { setOpen(false); logout(); }} className={itemClass}>
               Logout
             </button>
           </div>

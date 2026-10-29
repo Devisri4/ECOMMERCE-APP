@@ -8,7 +8,6 @@ import Product from "./pages/Product";
 import Cart from "./pages/Cart";
 import Login from "./pages/Login";
 import PlaceOrder from "./pages/PlaceOrder";
-import Orders from "./pages/Orders";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom"; // Notice: no BrowserRouter here
 import Footer from './components/Footer';
 import SearchBar from './components/SearchBar';
@@ -28,7 +27,6 @@ const PAGE_TITLES = {
   '/cart': 'Your bag',
   '/login': 'Sign in',
   '/place-order': 'Checkout',
-  '/orders': 'My orders',
   '/order-success': 'Order confirmed',
   '/account': 'My account',
 };
@@ -70,9 +68,10 @@ const App = () => {
           <Route path="/cart" element={<Cart />} />
           <Route path="/login" element={<Login />} />
           <Route path="/place-order" element={<PlaceOrder />} />
-          <Route path="/orders" element={<Orders />} />
+          {/* One orders page: the account's Orders tab (old links and Stripe's return still use /orders) */}
+          <Route path="/orders" element={<Navigate to="/account?tab=orders" replace />} />
           {/* Stripe returns via the backend (/api/order/verifyStripe), so the old /verify page is gone */}
-          <Route path="/verify" element={<Navigate to="/orders" replace />} />
+          <Route path="/verify" element={<Navigate to="/account?tab=orders" replace />} />
           <Route path="/order-success" element={<OrderSuccess />} />
           <Route path="/account" element={<Account />} />
           <Route path="*" element={<NotFound />} />

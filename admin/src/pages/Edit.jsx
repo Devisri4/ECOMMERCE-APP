@@ -49,6 +49,8 @@ const Edit = ({ token, demo = false }) => {
       formData.append('bestseller', bestseller);
       formData.append('sizes', JSON.stringify(sizes));
       formData.append('stock', JSON.stringify(stock));
+      // What the form loaded, so the server applies only this change to stock (orders may have taken units since)
+      formData.append('stockBase', JSON.stringify(product?.stock || {}));
       // Slots without a new file keep their current image (or are cleared if removed)
       formData.append('existingImages', JSON.stringify(slots.map((s) => (s.file ? null : s.url))));
       slots.forEach((slot, i) => slot.file && formData.append(`image${i + 1}`, slot.file));
@@ -70,10 +72,11 @@ const Edit = ({ token, demo = false }) => {
 
   if (status === 'loading') {
     return (
-      <div className='flex max-w-3xl flex-col gap-6' aria-hidden='true'>
-        <div className='h-8 w-48 animate-pulse rounded-md bg-zinc-800/50' />
-        <div className='h-40 animate-pulse rounded-xl border border-zinc-800 bg-zinc-800/40' />
-        <div className='h-72 animate-pulse rounded-xl border border-zinc-800 bg-zinc-800/40' />
+      <div className='flex max-w-3xl flex-col gap-6' role='status'>
+        <span className='sr-only'>Loading product…</span>
+        <div aria-hidden='true' className='h-8 w-48 animate-pulse rounded-md bg-zinc-800/50' />
+        <div aria-hidden='true' className='h-40 animate-pulse rounded-xl border border-zinc-800 bg-zinc-800/40' />
+        <div aria-hidden='true' className='h-72 animate-pulse rounded-xl border border-zinc-800 bg-zinc-800/40' />
       </div>
     );
   }
@@ -108,8 +111,8 @@ const Edit = ({ token, demo = false }) => {
           images: product.image,
           stock: product.stock,
         }}
-        title='Edit product'
-        subtitle='Changes appear in the store as soon as you save.'
+        title={demo ? 'View product' : 'Edit product'}
+        subtitle={demo ? 'Read-only demo: you can look around, but changes can’t be saved.' : 'Changes appear in the store as soon as you save.'}
         submitLabel='Save changes'
         submittingLabel='Saving…'
         onSubmit={onSubmit}

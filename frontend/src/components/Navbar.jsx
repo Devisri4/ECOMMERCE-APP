@@ -19,7 +19,8 @@ const Navbar = () => {
   const drawerRef = useRef(null);
   useDrawerFocus(visible, drawerRef);
   const [scrolled, setScrolled] = useState(false);
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const { pathname } = location;
 
   const { setShowSearch, getCartCount, navigate, token, logout, wishlist } = useContext(ShopContext);
   const cartCount = getCartCount();
@@ -33,7 +34,7 @@ const Navbar = () => {
   // Close the mobile drawer whenever the route changes
   useEffect(() => {
     setVisible(false);
-  }, [pathname]);
+  }, [location.key]); // every navigation, even to /account?tab=… from /account
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 4);

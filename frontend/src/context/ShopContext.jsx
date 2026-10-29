@@ -138,8 +138,10 @@ const ShopContextProvider = ({ children }) => {
                         const qty = guestCart[itemId][size];
                         if (qty > 0) {
                             if (!merged[itemId]) merged[itemId] = {};
-                            // Same 99-per-size cap as the server (cartController / checkout)
-                            merged[itemId][size] = Math.min((merged[itemId][size] || 0) + qty, 99);
+                            // Same caps as the server: 99 per size, and no more than the units left
+                            const product = products.find((p) => p._id === itemId);
+                            const limit = Math.min(99, unitsLeft(product, size));
+                            merged[itemId][size] = Math.min((merged[itemId][size] || 0) + qty, limit);
                             updates.push({ itemId, size, quantity: merged[itemId][size] });
                         }
                     }
@@ -148,12 +150,18 @@ const ShopContextProvider = ({ children }) => {
                 setCartItems(merged);
                 if (updates.length === 0) return;
 
-                // Sequential: each update rewrites the whole server cart, so parallel calls would race.
-                // The server may refuse a line (e.g. less stock left than the guest bag held).
+                // One line at a time. Each line leaves the stored guest bag as soon as the server has
+                // answered for it, so a sign-in interrupted halfway can't add the same items twice later.
                 const refused = [];
                 for (const update of updates) {
                     const result = await axios.post(backendUrl + '/api/cart/update', update, { headers: { token: currentToken } });
                     if (!result.data.success) refused.push(result.data.message);
+                    const rest = readGuestCart();
+                    if (rest[update.itemId]) {
+                        delete rest[update.itemId][update.size];
+                        if (Object.keys(rest[update.itemId]).length === 0) delete rest[update.itemId];
+                    }
+                    try { localStorage.setItem(GUEST_CART_KEY, JSON.stringify(rest)); } catch { /* storage unavailable */ }
                 }
                 localStorage.removeItem(GUEST_CART_KEY);
 
@@ -175,6 +183,8 @@ const ShopContextProvider = ({ children }) => {
     useEffect(() => {
         let active = true;
         if (token) {
+            // Bag and checkout wait for the account bag (and the merge) instead of showing the guest bag
+            setCartLoaded(false);
             getUserCart(token, () => active);
         } else {
             setCartItems(readGuestCart());
@@ -248,21 +258,23 @@ const ShopContextProvider = ({ children }) => {
     const toggleWishlist = async (productId) => {
         if (wishlistPending.current.has(productId)) return;
         const adding = !wishlist.includes(productId);
-        const previous = wishlist;
-        setWishlist((prev) => (adding ? [...prev, productId] : prev.filter((id) => id !== productId)));
+        // Only ever touch this one product, so replies for other products (in any order) can't undo it
+        const setSaved = (saved) =>
+            setWishlist((prev) => (saved ? (prev.includes(productId) ? prev : [...prev, productId]) : prev.filter((id) => id !== productId)));
+        setSaved(adding);
         toast.success(adding ? 'Saved to your wishlist.' : 'Removed from your wishlist.', { toastId: 'wishlist' });
 
         if (!token) return;
         wishlistPending.current.add(productId);
         try {
             const res = await axios.post(backendUrl + '/api/user/wishlist/toggle', { productId }, { headers: { token } });
-            if (res.data.success) setWishlist(res.data.wishlist);
+            if (res.data.success) setSaved(res.data.added);
             else {
-                setWishlist(previous);
+                setSaved(!adding);
                 toast.error(friendlyError(res.data.message, 'We couldn’t update your wishlist. Please try again.'), { toastId: 'wishlist' });
             }
         } catch (error) {
-            setWishlist(previous);
+            setSaved(!adding);
             toast.error(friendlyError(error, 'We couldn’t update your wishlist. Please try again.'), { toastId: 'wishlist' });
         } finally {
             wishlistPending.current.delete(productId);

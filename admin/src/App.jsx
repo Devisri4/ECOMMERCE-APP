@@ -37,6 +37,13 @@ useEffect(() => {
   localStorage.setItem('token', token);
 }, [token]);
 
+// Signing in or out in another tab updates this one too
+useEffect(() => {
+  const onStorage = (e) => { if (e.key === 'token') setToken(e.newValue || '') };
+  window.addEventListener('storage', onStorage);
+  return () => window.removeEventListener('storage', onStorage);
+}, []);
+
 // Expired/invalid admin session (e.g. after the token format change) → back to the login screen
 useEffect(() => {
   onSessionExpired = () => {

@@ -85,3 +85,12 @@ test("product stock validation keeps selected sizes and whole numbers only", () 
   assert.match(validateProductFields({ ...base, stock: '{"S":2.5}' }).error, /whole number/);
   assert.match(validateProductFields({ ...base, stock: "[1,2]" }).error, /Invalid stock/);
 });
+
+test("a product edit applies only the admin's stock change, never below zero", async () => {
+  const { stockChange } = await import("../controllers/productController.js");
+  // Loaded M: 5, L: 2, XL tracked; saved M: 8, L: 1, S newly tracked, XL no longer tracked
+  const { filter, update } = stockChange({ M: 5, L: 2, XL: 4 }, { M: 8, L: 1, S: 3 });
+  assert.deepEqual(update, { $inc: { "stock.M": 3, "stock.L": -1 }, $set: { "stock.S": 3 }, $unset: { "stock.XL": "" } });
+  assert.deepEqual(filter, { "stock.L": { $gte: 1 } }, "a decrease needs that many units still there");
+  assert.equal(stockChange({ M: 5 }, { M: 5 }).update, null, "no change, no write");
+});

@@ -30,6 +30,13 @@ const main = async () => {
   if (!process.env.MONGODB_URI) throw new Error("MONGODB_URI is not set");
   await mongoose.connect(process.env.MONGODB_URI, { dbName: process.env.MONGODB_DB || DEFAULT_DB_NAME });
 
+  // Guard against running it twice: after the first run the whole catalogue is at most ₹2,999
+  const highest = await productModel.findOne({}, { price: 1 }).sort({ price: -1 }).lean();
+  if (highest && highest.price <= 2999 && !args.includes("--force")) {
+    console.log("Prices already look adjusted (highest is ₹" + highest.price + "). Nothing to do. Use --force to run anyway.");
+    return;
+  }
+
   if (!apply) {
     const products = await productModel.find({}, { name: 1, price: 1 }).sort({ price: 1 }).lean();
     const rows = products.map((p) => ({ _id: String(p._id), name: p.name, before: p.price, after: repriced(p.price) }));

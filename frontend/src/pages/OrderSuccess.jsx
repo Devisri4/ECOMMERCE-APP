@@ -105,7 +105,7 @@ const OrderSuccess = () => {
         )}
 
         <div className='mt-10 flex flex-col gap-3 sm:flex-row sm:justify-center'>
-          <Link to='/orders' className='btn-primary'>View my orders</Link>
+          <Link to='/account?tab=orders' className='btn-primary'>View my orders</Link>
           <Link to='/collection' className='btn-secondary'>Continue shopping</Link>
         </div>
       </div>

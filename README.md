@@ -65,7 +65,7 @@ Templates are provided in each app's `.env.example`. Never commit real `.env` fi
 - **backend:** `MONGODB_URI`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `CLOUDINARY_NAME`,
   `CLOUDINARY_API_KEY`, `CLOUDINARY_SECRET_KEY`, `STRIPE_SECRET_KEY`, `FRONTEND_URL`, `ADMIN_URL`, `BACKEND_URL`
 - **backend (optional):** `STRIPE_WEBHOOK_SECRET`, `DEMO_ADMIN_EMAIL`, `DEMO_ADMIN_PASSWORD`, `DEMO_CUSTOMER_EMAIL`, `CORS_ORIGINS`, `MONGODB_DB`
-- **frontend:** `VITE_BACKEND_URL`, `VITE_SITE_URL` (for link previews), optional `VITE_DEMO_EMAIL`, `VITE_DEMO_PASSWORD`
+- **frontend:** `VITE_BACKEND_URL`, `VITE_SITE_URL` (for link previews; set automatically on Vercel), optional `VITE_DEMO_EMAIL`, `VITE_DEMO_PASSWORD`
 - **admin:** `VITE_BACKEND_URL`, optional `VITE_DEMO_ADMIN_EMAIL`, `VITE_DEMO_ADMIN_PASSWORD`
 
 ## Security highlights

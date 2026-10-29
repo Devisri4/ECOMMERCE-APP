@@ -4,14 +4,35 @@ import axios from 'axios'
 import { toast } from 'react-toastify'
 import { ShopContext } from '../context/ShopContext'
 import OrderHistory from '../components/OrderHistory'
+import AccountOverview from '../components/account/AccountOverview'
+import SavedAddresses from '../components/account/SavedAddresses'
+import WishlistPanel from '../components/account/WishlistPanel'
 import PasswordChecklist from '../components/PasswordChecklist'
 import { meetsPasswordRules } from '../utils/passwordRules'
 import { friendlyError } from '../utils/messages'
 
 const TABS = [
-  { id: 'profile', label: 'My profile' },
+  { id: 'overview', label: 'Overview' },
   { id: 'orders', label: 'My orders' },
+  { id: 'wishlist', label: 'Wishlist' },
+  { id: 'addresses', label: 'Addresses' },
+  { id: 'profile', label: 'My profile' },
 ]
+
+// The shared demo shopper can't change its name or password (the API refuses), so say so up front
+const DemoProfileNote = ({ profile }) => (
+  <div className='border border-neutral-200 bg-white px-5 py-6 sm:px-8 sm:py-8'>
+    <h2 className='font-display text-xl text-ink'>Personal details</h2>
+    <dl className='mt-5 grid gap-4 text-sm sm:grid-cols-2'>
+      <div><dt className='text-xs text-neutral-500'>Name</dt><dd className='mt-1 text-ink'>{profile.name}</dd></div>
+      <div><dt className='text-xs text-neutral-500'>Email</dt><dd className='mt-1 break-all text-ink'>{profile.email}</dd></div>
+    </dl>
+    <p className='mt-6 border-t border-neutral-200 pt-5 text-sm leading-relaxed text-neutral-600'>
+      This is a shared demo account, so its name and password can’t be changed. Create your own account to try editing
+      your profile and password.
+    </p>
+  </div>
+)
 
 const inputClass =
   'w-full border border-neutral-300 bg-white px-4 py-3 text-sm text-ink outline-none transition-colors placeholder:text-neutral-400 focus:border-ink focus-visible:outline-none disabled:bg-neutral-50 disabled:text-neutral-500'
@@ -203,7 +224,7 @@ const ChangePassword = () => {
 const Account = () => {
   const { backendUrl, token, navigate, logout } = useContext(ShopContext)
   const [searchParams] = useSearchParams()
-  const tab = TABS.some((t) => t.id === searchParams.get('tab')) ? searchParams.get('tab') : 'profile'
+  const tab = TABS.some((t) => t.id === searchParams.get('tab')) ? searchParams.get('tab') : 'overview'
 
   const [profile, setProfile] = useState(null)
   const [status, setStatus] = useState('loading') // loading | ready | error
@@ -260,7 +281,7 @@ const Account = () => {
               return (
                 <li key={t.id}>
                   <Link
-                    to={t.id === 'profile' ? '/account' : `/account?tab=${t.id}`}
+                    to={t.id === 'overview' ? '/account' : `/account?tab=${t.id}`}
                     aria-current={active ? 'page' : undefined}
                     className={`-mb-px block whitespace-nowrap border-b-2 px-1 py-3 text-xs uppercase tracking-[0.18em] transition-colors md:-ml-px md:mb-0 md:border-b-0 md:border-l-2 md:px-5 ${active ? 'border-ink text-ink' : 'border-transparent text-neutral-500 hover:text-ink'}`}
                   >
@@ -285,6 +306,8 @@ const Account = () => {
         <section aria-live='polite'>
           {tab === 'orders' ? (
             <OrderHistory />
+          ) : tab === 'wishlist' ? (
+            <WishlistPanel />
           ) : status === 'loading' ? (
             <div role='status' className='flex flex-col gap-6'>
               <span className='sr-only'>Loading your account…</span>
@@ -296,6 +319,12 @@ const Account = () => {
               <p className='text-sm text-neutral-600'>{errorMessage}</p>
               <button type='button' onClick={loadProfile} className='btn-secondary mt-6'>Try again</button>
             </div>
+          ) : tab === 'overview' ? (
+            <AccountOverview />
+          ) : tab === 'addresses' ? (
+            <SavedAddresses demo={profile.demo} />
+          ) : profile.demo ? (
+            <DemoProfileNote profile={profile} />
           ) : (
             <div className='flex flex-col gap-6'>
               <ProfileDetails key={profile.name} profile={profile} onSaved={setProfile} />

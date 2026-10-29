@@ -1,6 +1,7 @@
 import express from 'express';
 import { loginUser, registerUser, adminLogin, getProfile, updateProfile, changePassword } from '../controllers/userController.js';
 import authUser from '../middleware/auth.js';
+import { listAddresses, saveAddress, removeAddress, getWishlist, toggleWishlist, mergeWishlist } from '../controllers/accountController.js';
 import { loginLimiter, adminLoginLimiter, registerLimiter } from '../middleware/rateLimit.js';
 
 
@@ -16,5 +17,13 @@ userRouter.post('/admin', adminLoginLimiter, adminLogin)
 userRouter.post('/profile', authUser, getProfile)
 userRouter.post('/profile/update', authUser, updateProfile)
 userRouter.post('/password', authUser, changePassword)
+
+// Saved addresses and wishlist
+userRouter.post('/addresses', authUser, listAddresses)
+userRouter.post('/addresses/save', authUser, saveAddress)
+userRouter.post('/addresses/remove', authUser, removeAddress)
+userRouter.post('/wishlist', authUser, getWishlist)
+userRouter.post('/wishlist/toggle', authUser, toggleWishlist)
+userRouter.post('/wishlist/merge', authUser, mergeWishlist)
 
 export default userRouter;

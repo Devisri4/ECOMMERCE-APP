@@ -146,8 +146,8 @@ const NOT_AUTHORIZED = "Not Authorized Login Again"
 
 // The shared demo shopper account (DEMO_CUSTOMER_EMAIL) can't be renamed or have its password
 // changed, so one visitor can't lock the next one out.
-const DEMO_ACCOUNT_LOCKED = "The demo account can't be changed. Create your own account to try this."
-const isDemoCustomer = (user) =>
+export const DEMO_ACCOUNT_LOCKED = "The demo account can't be changed. Create your own account to try this."
+export const isDemoCustomer = (user) =>
     Boolean(process.env.DEMO_CUSTOMER_EMAIL) && user.email.toLowerCase() === normalizeEmail(process.env.DEMO_CUSTOMER_EMAIL)
 
 // Route for reading the signed-in customer's profile (never returns password or cart)
@@ -155,7 +155,8 @@ const getProfile = async (req, res) => {
     try {
         const user = await userModel.findById(req.userId).select('name email')
         if (!user) return res.json({ success: false, message: NOT_AUTHORIZED })
-        res.json({ success: true, user: { name: user.name, email: user.email } })
+        // demo: the shared demo shopper, so the account page can explain why details are locked
+        res.json({ success: true, user: { name: user.name, email: user.email, demo: isDemoCustomer(user) } })
     } catch (error) {
         sendServerError(res, error);
     }

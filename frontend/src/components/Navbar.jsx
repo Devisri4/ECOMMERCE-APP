@@ -17,7 +17,7 @@ const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
   const { pathname } = useLocation();
 
-  const { setShowSearch, getCartCount, navigate, token, logout } = useContext(ShopContext);
+  const { setShowSearch, getCartCount, navigate, token, logout, wishlist } = useContext(ShopContext);
   const cartCount = getCartCount();
 
   // Search lives on the collection page, so take the shopper there
@@ -102,6 +102,22 @@ const Navbar = () => {
               <img className="w-[18px]" src={assets.profile_icon} alt="" />
             </Link>
 
+            {/* Wishlist: guests sign in first; items they saved are kept and merged into the account */}
+            <Link
+              to={token ? '/account?tab=wishlist' : '/login?redirect=/account?tab=wishlist'}
+              className={`${iconButton} relative`}
+              aria-label={`Wishlist, ${wishlist.length} ${wishlist.length === 1 ? 'item' : 'items'}`}
+            >
+              <svg width='18' height='18' viewBox='0 0 24 24' aria-hidden='true'>
+                <path d='M12 20.5s-7.5-4.4-9.3-9.2C1.6 8.1 3.6 4.5 7.1 4.5c2 0 3.5 1.1 4.9 2.9 1.4-1.8 2.9-2.9 4.9-2.9 3.5 0 5.5 3.6 4.4 6.8-1.8 4.8-9.3 9.2-9.3 9.2z' fill='none' stroke='#111111' strokeWidth='1.6' strokeLinejoin='round' />
+              </svg>
+              {wishlist.length > 0 && (
+                <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-ink px-1 text-[9px] font-medium leading-none text-white">
+                  {wishlist.length}
+                </span>
+              )}
+            </Link>
+
             {/* Cart */}
             <Link to="/cart" className={`${iconButton} relative`} aria-label={`Cart, ${cartCount} ${cartCount === 1 ? 'item' : 'items'}`}>
               <img src={assets.cart_icon} className="w-[18px]" alt="" />
@@ -165,6 +181,7 @@ const Navbar = () => {
               <>
                 <Link to="/account" className="hover:text-ink">My account</Link>
                 <Link to="/account?tab=orders" className="hover:text-ink">My orders</Link>
+                <Link to="/account?tab=wishlist" className="hover:text-ink">Wishlist</Link>
                 <button type="button" onClick={logout} className="text-left hover:text-ink">Logout</button>
               </>
             ) : (

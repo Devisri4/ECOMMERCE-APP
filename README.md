@@ -32,7 +32,10 @@ FOREVER is a portfolio project: the store details are fictional and no orders ar
 - Editorial homepage, collection page with URL-based filters, sorting and search, and product pages with an image gallery
 - Guest shopping bag that persists across refreshes and merges into the account bag on sign-in
 - Checkout with cash on delivery or Stripe card payments, with client- and server-side validation
-- Account area: profile, password change, order history with status tracking, and cancellation of unpaid orders
+- Account area: overview (orders, total spent, latest order), order history with status tracking and cancellation
+  of unpaid orders, wishlist, up to five saved addresses with a default, profile and password change
+- Wishlist with a heart on every product, kept in the browser for guests and merged into the account on sign-in
+- Checkout pre-fills the default saved address, lets shoppers pick another, and can save a new one
 - Stock levels per size: sold-out sizes can't be picked, low stock shows "Only 3 left", and checkout can't oversell
 - Star ratings and reviews (one per customer per product, editable), with a "Verified buyer" badge for customers who ordered the item
 - Newsletter sign-up saved to the database
@@ -88,6 +91,7 @@ Templates are provided in each app's `.env.example`. Never commit real `.env` fi
 
 ## Known limitations
 
-- No password reset by email or saved addresses, and no admin moderation screen for reviews.
+- No password reset by email, and no admin moderation screen for reviews.
+- The shared demo shopper can't save addresses or change its profile, so visitors never see each other's details.
 - Refunds aren't automated: paid card orders can't be cancelled in the app and are refunded via the Stripe dashboard.
 - Products and orders are loaded in full rather than paginated, which suits a catalogue of this size.

@@ -8,6 +8,7 @@ import usePageTitle from '../hooks/usePageTitle';
 import { LOW_STOCK, isSoldOut, unitsLeft } from '../utils/stock';
 import Stars from '../components/Stars';
 import ProductReviews from '../components/ProductReviews';
+import WishlistButton from '../components/WishlistButton';
 
 // Store policies already stated across the site (footer/policy strip) — no invented claims.
 const DELIVERY_NOTES = [
@@ -203,6 +204,7 @@ const Product = () => {
             <button type='button' onClick={onAdd} disabled={soldOut} className='btn-primary flex-1 py-4' aria-live='polite'>
               {soldOut ? 'Sold out' : justAdded ? 'Added to bag' : 'Add to bag'}
             </button>
+            {!justAdded && <WishlistButton productId={productData._id} productName={productData.name} variant='full' />}
             {justAdded && <Link to='/cart' className='btn-secondary py-4'>View bag</Link>}
           </div>
 

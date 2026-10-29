@@ -18,6 +18,17 @@ const readGuestCart = () => {
     }
 };
 
+// Same idea for the wishlist: a list of product ids kept in the browser until sign-in
+const GUEST_WISHLIST_KEY = 'guestWishlist';
+const readGuestWishlist = () => {
+    try {
+        const ids = JSON.parse(localStorage.getItem(GUEST_WISHLIST_KEY));
+        return Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : [];
+    } catch {
+        return [];
+    }
+};
+
 const ADDED_TOAST_ID = 'added-to-bag';
 
 // Session-expiry interceptor is registered at module load (not in an effect) so it also covers
@@ -47,6 +58,7 @@ const ShopContextProvider = ({ children }) => {
     const [token, setToken] = useState(() => localStorage.getItem('token') || '');
     const [cartItems, setCartItems] = useState(() => (localStorage.getItem('token') ? {} : readGuestCart()));
     const [cartLoaded, setCartLoaded] = useState(false);
+    const [wishlist, setWishlist] = useState(() => (localStorage.getItem('token') ? [] : readGuestWishlist()));
     const [search, setSearch] = useState('');
     const [showSearch, setShowSearch] = useState(false);
 
@@ -93,6 +105,7 @@ const ShopContextProvider = ({ children }) => {
             localStorage.removeItem('token');
             setToken('');
             setCartItems({});
+            setWishlist([]);
             toast.error('Your session has expired. Please sign in again.', { toastId: 'session-expired' });
         };
         return () => { onSessionExpired = () => {}; };
@@ -157,6 +170,57 @@ const ShopContextProvider = ({ children }) => {
             // storage unavailable (e.g. private mode) — cart still works for this visit
         }
     }, [cartItems, token]);
+
+    /* ---------------- WISHLIST ---------------- */
+    // Signed in: load the account wishlist and add anything saved as a guest. Signed out: the browser copy.
+    useEffect(() => {
+        if (!token) {
+            setWishlist(readGuestWishlist());
+            return;
+        }
+        const guest = readGuestWishlist();
+        const request = guest.length
+            ? axios.post(backendUrl + '/api/user/wishlist/merge', { productIds: guest }, { headers: { token } })
+            : axios.post(backendUrl + '/api/user/wishlist', {}, { headers: { token } });
+        request
+            .then((res) => {
+                if (!res.data.success) return;
+                setWishlist(res.data.wishlist);
+                localStorage.removeItem(GUEST_WISHLIST_KEY);
+            })
+            .catch((err) => console.log(err));
+    }, [token, backendUrl]);
+
+    useEffect(() => {
+        if (token) return;
+        try {
+            localStorage.setItem(GUEST_WISHLIST_KEY, JSON.stringify(wishlist));
+        } catch {
+            // storage unavailable — the wishlist still works for this visit
+        }
+    }, [wishlist, token]);
+
+    const isInWishlist = (productId) => wishlist.includes(productId);
+
+    const toggleWishlist = async (productId) => {
+        const adding = !wishlist.includes(productId);
+        const previous = wishlist;
+        setWishlist((prev) => (adding ? [...prev, productId] : prev.filter((id) => id !== productId)));
+        toast.success(adding ? 'Saved to your wishlist.' : 'Removed from your wishlist.', { toastId: 'wishlist' });
+
+        if (!token) return;
+        try {
+            const res = await axios.post(backendUrl + '/api/user/wishlist/toggle', { productId }, { headers: { token } });
+            if (res.data.success) setWishlist(res.data.wishlist);
+            else {
+                setWishlist(previous);
+                toast.error(friendlyError(res.data.message, 'We couldn’t update your wishlist. Please try again.'), { toastId: 'wishlist' });
+            }
+        } catch (error) {
+            setWishlist(previous);
+            toast.error(friendlyError(error, 'We couldn’t update your wishlist. Please try again.'), { toastId: 'wishlist' });
+        }
+    };
 
     const showAddedToast = (itemId, size) => {
         const product = products.find((p) => p._id === itemId);
@@ -297,6 +361,7 @@ const ShopContextProvider = ({ children }) => {
         localStorage.removeItem('token');
         setToken('');
         setCartItems({});
+        setWishlist([]);
         toast.success('You’ve been signed out.');
     };
 
@@ -317,6 +382,9 @@ const ShopContextProvider = ({ children }) => {
     getCartCount,
     getCartAmount,
     cartLoaded,
+    wishlist,
+    isInWishlist,
+    toggleWishlist,
     token,
     setToken,
     logout,

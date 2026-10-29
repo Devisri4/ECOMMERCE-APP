@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { optimizeImage } from '../utils/image';
 import { formatPrice } from '../utils/currency';
 import Stars from './Stars';
+import WishlistButton from './WishlistButton';
 
 const ProductItem = ({ id, image, name, price, soldOut = false, rating = 0, reviewCount = 0 }) => {
 
@@ -11,7 +12,9 @@ const ProductItem = ({ id, image, name, price, soldOut = false, rating = 0, revi
     // second shot (if any) is revealed on hover
     const hoverImage = Array.isArray(image) && image.length > 1 ? optimizeImage(image[1], 600) : null;
 
+    // The heart sits over the image but outside the link (a button inside a link isn't valid or accessible)
     return (
+        <div className="relative">
         <Link className="group block text-ink" to={`/product/${id}`}>
             <div className="relative aspect-[13/15] overflow-hidden bg-neutral-100">
                 <img
@@ -50,6 +53,8 @@ const ProductItem = ({ id, image, name, price, soldOut = false, rating = 0, revi
                 )}
             </div>
         </Link>
+        <WishlistButton productId={id} productName={name} className="absolute right-3 top-3" />
+        </div>
     );
 };
 

@@ -9,7 +9,12 @@ const productSchema = new mongoose.Schema({
     subCategory: { type: String, required: true },
     sizes: { type:[String], required: true },
     bestseller:{ type: Boolean },
-    date: { type: Number, required:true }
+    date: { type: Number, required:true },
+    // Units left per size, e.g. { S: 4, M: 0 }. A size without an entry isn't tracked (always available).
+    stock: { type: mongoose.Schema.Types.Mixed },
+    // Average star rating and number of reviews, kept up to date by reviewController
+    rating: { type: Number, default: 0 },
+    reviewCount: { type: Number, default: 0 }
 },
 { collection: "products" } // Explicitly state the collection name for absolute control
 );

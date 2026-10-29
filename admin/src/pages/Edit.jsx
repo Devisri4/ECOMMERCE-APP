@@ -34,7 +34,7 @@ const Edit = ({ token }) => {
     return () => { cancelled = true; };
   }, [productId]);
 
-  const onSubmit = async ({ name, description, price, category, subCategory, bestseller, sizes, slots }) => {
+  const onSubmit = async ({ name, description, price, category, subCategory, bestseller, sizes, slots, stock }) => {
     try {
       const formData = new FormData();
       formData.append('id', productId);
@@ -45,6 +45,7 @@ const Edit = ({ token }) => {
       formData.append('subCategory', subCategory);
       formData.append('bestseller', bestseller);
       formData.append('sizes', JSON.stringify(sizes));
+      formData.append('stock', JSON.stringify(stock));
       // Slots without a new file keep their current image (or are cleared if removed)
       formData.append('existingImages', JSON.stringify(slots.map((s) => (s.file ? null : s.url))));
       slots.forEach((slot, i) => slot.file && formData.append(`image${i + 1}`, slot.file));
@@ -100,6 +101,7 @@ const Edit = ({ token }) => {
           bestseller: product.bestseller,
           sizes: product.sizes,
           images: product.image,
+          stock: product.stock,
         }}
         title='Edit product'
         subtitle='Changes appear in the store as soon as you save.'

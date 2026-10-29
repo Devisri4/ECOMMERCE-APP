@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { friendlyError } from '../utils/messages';
 import { STORE_CURRENCY } from '../utils/currency';
+import { unitsLeft } from '../utils/stock';
 
 export const ShopContext = createContext();
 
@@ -79,6 +80,10 @@ const ShopContextProvider = ({ children }) => {
     useEffect(() => {
         getProductsData();
     }, []);
+
+    // Applies a change to one product in place (e.g. a new rating after a review) without reloading the catalogue
+    const updateProduct = (id, patch) =>
+        setProducts((prev) => prev.map((p) => (p._id === id ? { ...p, ...patch } : p)));
 
     /* ---------------- SESSION EXPIRY ---------------- */
     // If any authenticated call says the session is no longer valid (expired/invalid token),
@@ -177,8 +182,15 @@ const ShopContextProvider = ({ children }) => {
         }
 
         // Server rejects quantities above 99 per size (orderController.buildOrderItems)
-        if ((cartItems[itemId]?.[size] || 0) >= 99) {
+        const inBag = cartItems[itemId]?.[size] || 0;
+        if (inBag >= 99) {
             toast.error('You can add up to 99 of each item.', { toastId: 'max-qty' });
+            return;
+        }
+        const product = products.find((p) => p._id === itemId);
+        const left = unitsLeft(product, size);
+        if (inBag >= left) {
+            toast.error(left === 0 ? 'This size is sold out.' : `Only ${left} left in this size.`, { toastId: 'stock-limit' });
             return;
         }
 
@@ -198,15 +210,32 @@ const ShopContextProvider = ({ children }) => {
                     { itemId, size },
                     { headers: { token } }
                 );
-                if (!res.data.success) toast.error(friendlyError(res.data.message, 'We couldn’t add this item to your bag. Please try again.'));
+                if (!res.data.success) {
+                    undoAdd(itemId, size);
+                    toast.error(friendlyError(res.data.message, 'We couldn’t add this item to your bag. Please try again.'));
+                }
             } catch (error) {
                 console.log(error);
+                undoAdd(itemId, size);
                 toast.error(friendlyError(error, 'We couldn’t add this item to your bag. Please try again.'));
             }
         }
     };
 
+    // Takes back an optimistic add the server refused, so the bag matches what is saved
+    const undoAdd = (itemId, size) => {
+        setCartItems((prev) => {
+            const copy = structuredClone(prev);
+            if (!copy[itemId]?.[size]) return prev;
+            copy[itemId][size] -= 1;
+            if (copy[itemId][size] <= 0) delete copy[itemId][size];
+            if (Object.keys(copy[itemId]).length === 0) delete copy[itemId];
+            return copy;
+        });
+    };
+
     const updateQuantity = async (itemId, size, qty) => {
+        const previous = cartItems;
         const copy = structuredClone(cartItems);
         if (!copy[itemId]) return;
 
@@ -223,13 +252,19 @@ const ShopContextProvider = ({ children }) => {
 
         if (token) {
             try {
-                await axios.post(
+                const res = await axios.post(
                     backendUrl + '/api/cart/update',
                     { itemId, size, quantity: qty },
                     { headers: { token } }
                 );
+                // Refused (e.g. not enough stock): go back to what the server still has
+                if (!res.data.success) {
+                    setCartItems(previous);
+                    toast.error(friendlyError(res.data.message, 'We couldn’t update your bag. Please try again.'));
+                }
             } catch (error) {
                 console.log(error);
+                setCartItems(previous);
                 toast.error(friendlyError(error, 'We couldn’t update your bag. Please try again.'));
             }
         }
@@ -272,6 +307,7 @@ const ShopContextProvider = ({ children }) => {
     productsLoading,
     productsError,
     getProductsData,
+    updateProduct,
     cartItems,
     setCartItems,   // ✅ MUST BE HERE
     currency,

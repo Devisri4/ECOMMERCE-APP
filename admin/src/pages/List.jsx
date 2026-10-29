@@ -12,6 +12,22 @@ const thumb = (url) =>
     ? url.replace('/upload/', '/upload/f_auto,q_auto,c_fill,w_96,h_110/')
     : url
 
+// Stock summary for a product row: null when no size is tracked
+const LOW_STOCK = 5
+const stockSummary = (product) => {
+  const tracked = (product.sizes || []).filter((s) => product.stock && Object.hasOwn(product.stock, s))
+  if (tracked.length === 0) return null
+  const soldOut = tracked.filter((s) => product.stock[s] === 0)
+  const low = tracked.filter((s) => product.stock[s] > 0 && product.stock[s] <= LOW_STOCK)
+  const total = tracked.reduce((sum, s) => sum + product.stock[s], 0)
+  if (soldOut.length === tracked.length) return { tone: 'bg-red-500/10 text-red-300', text: 'Sold out' }
+  if (soldOut.length || low.length) {
+    const parts = [soldOut.length && `${soldOut.join(', ')} sold out`, low.length && `${low.join(', ')} low`].filter(Boolean)
+    return { tone: 'bg-amber-500/10 text-amber-300', text: `${total} in stock · ${parts.join(' · ')}` }
+  }
+  return { tone: 'bg-zinc-700/40 text-zinc-300', text: `${total} in stock` }
+}
+
 const List = ({token}) => {
 
   const [list, setList] = useState([])
@@ -98,7 +114,12 @@ const List = ({token}) => {
               <div className='min-w-0'>
                 <p className='truncate text-zinc-100'>{item.name}</p>
                 <p className='text-xs text-zinc-500 md:hidden'>{item.category} · {formatPrice(item.price)}</p>
-                {item.bestseller && <span className='mt-1 inline-block rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-violet-300'>Bestseller</span>}
+                <div className='mt-1 flex flex-wrap gap-1.5'>
+                  {item.bestseller && <span className='inline-block rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-violet-300'>Bestseller</span>}
+                  {stockSummary(item) && (
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] ${stockSummary(item).tone}`}>{stockSummary(item).text}</span>
+                  )}
+                </div>
               </div>
               <p className='hidden text-zinc-400 md:block'>{item.category} · {item.subCategory}</p>
               <p className='hidden text-zinc-200 md:block'>{formatPrice(item.price)}</p>

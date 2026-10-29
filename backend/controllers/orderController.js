@@ -4,6 +4,7 @@ import productModel from "../models/productModel.js";
 import stripe from "../config/stripe.js";
 import { backendUrl as configuredBackendUrl, frontendUrl } from "../config/env.js";
 import { sendServerError } from "../utils/http.js";
+import { unitsLeft, stockMessage } from "../utils/stock.js";
 
 // Store currency. Product prices and delivery are whole rupees; Stripe amounts are in paise (×100).
 // Orders placed before the INR switch have no `currency` and are treated as USD (see orderModel).
@@ -42,12 +43,61 @@ const buildOrderItems = async (items) => {
     if (!product) throw new OrderValidationError("Some items in your bag are no longer available");
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) throw new OrderValidationError("Invalid item quantity");
     if (!product.sizes.includes(item.size)) throw new OrderValidationError(`Size ${item.size} is not available for ${product.name}`);
-    // Same shape the frontend already sends (product fields + size + quantity), but from the DB
-    return { ...product, size: item.size, quantity };
+    if (quantity > unitsLeft(product, item.size)) throw new OrderValidationError(stockMessage(product.name, item.size, unitsLeft(product, item.size)));
+    // Same shape the frontend already sends (product fields + size + quantity), but from the DB.
+    // Live stock and review totals aren't part of what was bought, so they aren't copied onto the order.
+    const { stock, rating, reviewCount, ...snapshot } = product; // eslint-disable-line no-unused-vars
+    return { ...snapshot, size: item.size, quantity };
   });
 
   const subtotal = orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   return { orderItems, amount: subtotal + deliveryCharge };
+};
+
+// ----------------- STOCK -----------------
+// product.stock maps size → units left; a size without an entry isn't tracked. Every order that isn't
+// Cancelled holds its units: they are taken when the order is created (or re-opened by the admin) and
+// given back exactly once, when it is cancelled or an unpaid card order is removed. Items whose units
+// were taken carry stockReserved: true, so only those are given back.
+
+export const releaseStock = async (items = []) => {
+  for (const item of items.filter((i) => i.stockReserved)) {
+    const path = `stock.${item.size}`;
+    // $exists: if the admin has since stopped tracking this size, there is nothing to give back
+    await productModel.updateOne({ _id: item._id, [path]: { $exists: true } }, { $inc: { [path]: item.quantity } });
+  }
+};
+
+// All or nothing: each size is decremented only while enough units are left (one atomic update per item),
+// so two shoppers can't both buy the last one. Returns the items with stockReserved set.
+export const reserveStock = async (items) => {
+  const reserved = [];
+  try {
+    for (const item of items) {
+      const path = `stock.${item.size}`;
+      const res = await productModel.updateOne({ _id: item._id, [path]: { $gte: item.quantity } }, { $inc: { [path]: -item.quantity } });
+      if (res.modifiedCount === 1) {
+        reserved.push({ ...item, stockReserved: true });
+        continue;
+      }
+      const product = await productModel.findById(item._id).select("name stock").lean();
+      const left = unitsLeft(product, item.size);
+      if (product && left !== Infinity) throw new OrderValidationError(stockMessage(product.name, item.size, left));
+      reserved.push({ ...item, stockReserved: false }); // size not tracked (or product since deleted)
+    }
+    return reserved;
+  } catch (err) {
+    await releaseStock(reserved);
+    throw err;
+  }
+};
+
+// Removes an unpaid card order (cancelled or abandoned checkout) and gives its units back, once:
+// the conditional delete means only one of the redirect, the webhook or the list sync can win.
+const discardUnpaidOrder = async (orderId) => {
+  const removed = await orderModel.findOneAndDelete({ _id: orderId, payment: false });
+  if (removed && removed.status !== "Cancelled") await releaseStock(removed.items);
+  return Boolean(removed);
 };
 
 // ----------------- SERVER-SIDE ADDRESS VALIDATION -----------------
@@ -121,7 +171,7 @@ const syncStripeOrder = async (order) => {
   }
   if (session.status === "expired") {
     // Abandoned checkout: nothing was charged, so remove the unpaid order (same as a cancelled checkout)
-    await orderModel.findByIdAndDelete(order._id);
+    await discardUnpaidOrder(order._id);
     return "removed";
   }
   return session.status === "complete" ? "processing" : "open";
@@ -143,10 +193,11 @@ const placeOrder = async (req, res) => {
     const { items, address } = req.body;
     const cleanAddress = validateAddress(address);
     const { orderItems, amount } = await buildOrderItems(items);
+    const reservedItems = await reserveStock(orderItems);
 
     const newOrder = new orderModel({
       userId,
-      items: orderItems,
+      items: reservedItems,
       address: cleanAddress,
       amount,
       paymentMethod: "COD",
@@ -155,7 +206,12 @@ const placeOrder = async (req, res) => {
       date: Date.now(),
     });
 
-    await newOrder.save();
+    try {
+      await newOrder.save();
+    } catch (saveErr) {
+      await releaseStock(reservedItems);
+      throw saveErr;
+    }
     await userModel.findByIdAndUpdate(userId, { cartData: {} });
 
     res.json({ success: true, message: "Order Placed", orderId: newOrder._id });
@@ -178,9 +234,10 @@ const placeOrderStripe = async (req, res) => {
       return res.json({ success: false, message: "Card payments are temporarily unavailable. Please choose cash on delivery." });
     }
 
+    const reservedItems = await reserveStock(orderItems);
     const newOrder = new orderModel({
       userId,
-      items: orderItems,
+      items: reservedItems,
       address: cleanAddress,
       amount,
       paymentMethod: "Stripe",
@@ -189,7 +246,12 @@ const placeOrderStripe = async (req, res) => {
       date: Date.now(),
     });
 
-    await newOrder.save();
+    try {
+      await newOrder.save();
+    } catch (saveErr) {
+      await releaseStock(reservedItems);
+      throw saveErr;
+    }
 
     const line_items = orderItems.map(item => ({
       price_data: {
@@ -221,8 +283,8 @@ const placeOrderStripe = async (req, res) => {
         expires_at: Math.floor(Date.now() / 1000) + STRIPE_SESSION_TTL_SECONDS,
       });
     } catch (stripeErr) {
-      // Don't leave an order behind for a payment page that was never created
-      await orderModel.findByIdAndDelete(newOrder._id);
+      // Don't leave an order (or held stock) behind for a payment page that was never created
+      await discardUnpaidOrder(newOrder._id);
       throw stripeErr;
     }
 
@@ -272,7 +334,7 @@ const verifyStripe = async (req, res) => {
 
     // Cancelled (session still open) or abandoned (expired): nothing was charged
     if (session.status === "open") await expireSessionIfOpen(session.id);
-    await orderModel.findByIdAndDelete(order._id);
+    await discardUnpaidOrder(order._id);
     return res.redirect(cartUrl + "?payment=cancelled");
   } catch (err) {
     console.log(err);
@@ -307,7 +369,7 @@ const stripeWebhook = async (req, res) => {
         (event.type === "checkout.session.completed" && session.payment_status === "paid") ||
         event.type === "checkout.session.async_payment_succeeded";
       if (paid) await markPaid(order);
-      else if (event.type === "checkout.session.expired") await orderModel.findByIdAndDelete(order._id);
+      else if (event.type === "checkout.session.expired") await discardUnpaidOrder(order._id);
     }
     res.json({ received: true });
   } catch (err) {
@@ -356,8 +418,13 @@ const cancelOrder = async (req, res) => {
       return res.json({ success: false, message: "This order can no longer be cancelled" });
     }
 
-    order.status = "Cancelled";
-    await order.save();
+    // Conditional update, so a double click (or an admin change at the same moment) can't give units back twice
+    const cancelled = await orderModel.findOneAndUpdate(
+      { _id: order._id, status: { $in: CANCELLABLE_STATUSES }, payment: false },
+      { status: "Cancelled" }
+    );
+    if (!cancelled) return res.json({ success: false, message: "This order can no longer be cancelled" });
+    await releaseStock(cancelled.items);
     res.json({ success: true, message: "Order cancelled" });
   } catch (err) {
     sendServerError(res, err);
@@ -413,13 +480,29 @@ const updateStatus = async (req, res) => {
       });
     }
 
-    order.status = status;
+    const update = { status };
     // Cash on delivery is collected on delivery, so it counts as paid exactly when the order is Delivered
-    if (order.paymentMethod === "COD") order.payment = status === "Delivered";
-    await order.save();
+    if (order.paymentMethod === "COD") update.payment = status === "Delivered";
+
+    const wasCancelled = order.status === "Cancelled";
+    const nowCancelled = status === "Cancelled";
+
+    if (!wasCancelled && nowCancelled) {
+      // Into Cancelled: give the units back (only if this request is the one that cancelled it)
+      const previous = await orderModel.findOneAndUpdate({ _id: order._id, status: { $ne: "Cancelled" } }, update);
+      if (previous) await releaseStock(previous.items);
+    } else if (wasCancelled && !nowCancelled) {
+      // Re-opening a cancelled order takes its units again, which fails if they have been sold since
+      const items = await reserveStock(order.items.map(({ stockReserved, ...item }) => item)); // eslint-disable-line no-unused-vars
+      const reopened = await orderModel.findOneAndUpdate({ _id: order._id, status: "Cancelled" }, { ...update, items });
+      if (!reopened) await releaseStock(items);
+    } else {
+      await orderModel.updateOne({ _id: order._id }, update);
+    }
 
     res.json({ success: true, message: "Status Updated" });
   } catch (err) {
+    if (err instanceof OrderValidationError) return res.json({ success: false, message: `Can't re-open this order: ${err.message}` });
     sendServerError(res, err);
   }
 };

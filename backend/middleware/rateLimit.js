@@ -41,5 +41,10 @@ export const newsletterLimiter = rateLimit({
     max: 10,
     message: "Too many sign-ups from this network. Please try again later.",
 });
+export const reviewLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 20,
+    message: "You've posted a lot of reviews. Please try again later.",
+});
 
 export default rateLimit;

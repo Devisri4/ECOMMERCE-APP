@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import axios from 'axios'
 import { backendUrl } from '../App'
 import { formatPrice, orderCurrency } from '../utils/currency'
+import SalesCharts from '../components/SalesCharts'
 
 // Overview computed from the existing product list + admin order list endpoints (no new APIs, no mock data)
 const Dashboard = ({ token }) => {
@@ -80,6 +81,8 @@ const Dashboard = ({ token }) => {
             ))
           : [0, 1, 2, 3, 4].map((i) => <div key={i} aria-hidden='true' className='h-32 animate-pulse rounded-xl border border-zinc-800 bg-zinc-800/40' />)}
       </div>
+
+      {data && <SalesCharts orders={orders} />}
 
       <section className='mt-10 rounded-xl border border-zinc-800 bg-[#202024]'>
         <div className='flex items-center justify-between border-b border-zinc-800 px-5 py-4'>

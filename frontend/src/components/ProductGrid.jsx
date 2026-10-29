@@ -1,6 +1,7 @@
 import React, { useContext } from 'react';
 import { ShopContext } from '../context/ShopContext';
 import ProductItem from './ProductItem';
+import { isSoldOut } from '../utils/stock';
 
 // Renders a product grid with shared loading, error and empty states.
 // `columns` must be a full Tailwind class string so it is picked up by the build.
@@ -46,7 +47,16 @@ const ProductGrid = ({
     return (
         <div className={gridClass}>
             {items.map((item) => (
-                <ProductItem key={item._id} id={item._id} name={item.name} price={item.price} image={item.image} />
+                <ProductItem
+                    key={item._id}
+                    id={item._id}
+                    name={item.name}
+                    price={item.price}
+                    image={item.image}
+                    soldOut={isSoldOut(item)}
+                    rating={item.rating}
+                    reviewCount={item.reviewCount}
+                />
             ))}
         </div>
     );

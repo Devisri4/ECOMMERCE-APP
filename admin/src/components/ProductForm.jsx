@@ -12,10 +12,14 @@ const thumb = (url) =>
     ? url.replace('/upload/', '/upload/f_auto,q_auto,c_fill,w_200,h_200/')
     : url;
 
-const EMPTY = { name: '', description: '', price: '', category: 'Men', subCategory: 'Topwear', bestseller: false, sizes: [], images: [] };
+const EMPTY = { name: '', description: '', price: '', category: 'Men', subCategory: 'Topwear', bestseller: false, sizes: [], images: [], stock: {} };
+
+// Stock inputs hold strings; an empty box means that size isn't tracked
+const toStockInputs = (stock = {}) => Object.fromEntries(Object.entries(stock || {}).map(([size, units]) => [size, String(units)]));
 
 // Shared by Add and Edit. Each of the 4 image slots holds either a new File, an existing URL, or nothing.
-// onSubmit({ ...fields, slots }) must resolve to true on success.
+// onSubmit({ ...fields, slots, stock }) must resolve to true on success; stock only has the selected
+// sizes whose box was filled in, e.g. { S: 4, M: 0 }.
 const ProductForm = ({ initial = EMPTY, title, subtitle, submitLabel, submittingLabel, onSubmit, resetOnSuccess = false }) => {
   const toSlots = (images = []) => [0, 1, 2, 3].map((i) => ({ file: null, url: images[i] || null }));
 
@@ -27,7 +31,11 @@ const ProductForm = ({ initial = EMPTY, title, subtitle, submitLabel, submitting
   const [bestseller, setBestseller] = useState(!!initial.bestseller);
   const [sizes, setSizes] = useState(initial.sizes || []);
   const [slots, setSlots] = useState(toSlots(initial.images));
+  const [stockInputs, setStockInputs] = useState(toStockInputs(initial.stock));
   const [submitting, setSubmitting] = useState(false);
+
+  const orderedSizes = SIZES.filter((s) => sizes.includes(s));
+  const setStockInput = (size, value) => setStockInputs((prev) => ({ ...prev, [size]: value.replace(/[^0-9]/g, '').slice(0, 4) }));
 
   // Object URLs for new files (revoked when they change)
   const previews = useMemo(() => slots.map((s) => (s.file ? URL.createObjectURL(s.file) : null)), [slots]);
@@ -40,7 +48,7 @@ const ProductForm = ({ initial = EMPTY, title, subtitle, submitLabel, submitting
 
   const reset = () => {
     setName(''); setDescription(''); setPrice(''); setCategory('Men'); setSubCategory('Topwear');
-    setBestseller(false); setSizes([]); setSlots(toSlots([]));
+    setBestseller(false); setSizes([]); setSlots(toSlots([])); setStockInputs({});
   };
 
   const handleSubmit = async (e) => {
@@ -54,7 +62,10 @@ const ProductForm = ({ initial = EMPTY, title, subtitle, submitLabel, submitting
 
     setSubmitting(true);
     try {
-      const ok = await onSubmit({ name, description, price, category, subCategory, bestseller, sizes, slots });
+      const stock = Object.fromEntries(
+        orderedSizes.filter((s) => (stockInputs[s] ?? '') !== '').map((s) => [s, Number(stockInputs[s])])
+      );
+      const ok = await onSubmit({ name, description, price, category, subCategory, bestseller, sizes, slots, stock });
       if (ok && resetOnSuccess) reset();
     } finally {
       setSubmitting(false);
@@ -154,6 +165,30 @@ const ProductForm = ({ initial = EMPTY, title, subtitle, submitLabel, submitting
             ))}
           </div>
         </fieldset>
+
+        {orderedSizes.length > 0 && (
+          <fieldset>
+            <legend className={labelClass}>
+              Stock per size <span className='normal-case tracking-normal text-zinc-500'>(leave empty to not track a size)</span>
+            </legend>
+            <div className='flex flex-wrap gap-3'>
+              {orderedSizes.map((size) => (
+                <label key={size} className='flex w-24 flex-col gap-1.5 text-xs text-zinc-400'>
+                  {size}
+                  <input
+                    type='text'
+                    inputMode='numeric'
+                    value={stockInputs[size] ?? ''}
+                    onChange={(e) => setStockInput(size, e.target.value)}
+                    placeholder='Not tracked'
+                    aria-label={`Units in stock, size ${size}`}
+                    className='w-full px-3 py-2 text-sm placeholder:text-zinc-600'
+                  />
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
 
         <label htmlFor='bestseller' className='flex cursor-pointer items-center gap-3 text-sm text-zinc-300'>
           <input onChange={() => setBestseller(prev => !prev) } checked={bestseller} type="checkbox" id='bestseller' className='h-4 w-4 accent-violet-500' />

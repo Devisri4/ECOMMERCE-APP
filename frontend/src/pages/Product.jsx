@@ -5,6 +5,9 @@ import RelatedProducts from '../components/RelatedProducts';
 import { optimizeImage } from '../utils/image';
 import { formatPrice } from '../utils/currency';
 import usePageTitle from '../hooks/usePageTitle';
+import { LOW_STOCK, isSoldOut, unitsLeft } from '../utils/stock';
+import Stars from '../components/Stars';
+import ProductReviews from '../components/ProductReviews';
 
 // Store policies already stated across the site (footer/policy strip) — no invented claims.
 const DELIVERY_NOTES = [
@@ -78,6 +81,8 @@ const Product = () => {
 
   const images = productData.image || [];
   const mainImage = images[activeIndex] || images[0];
+  const soldOut = isSoldOut(productData);
+  const selectedLeft = size ? unitsLeft(productData, size) : Infinity;
 
   const onAdd = () => {
     if (!size) {
@@ -155,30 +160,48 @@ const Product = () => {
           </p>
           <h1 className='mt-4 font-display text-3xl leading-tight text-ink sm:text-4xl'>{productData.name}</h1>
           <p className='mt-4 text-2xl text-ink'>{formatPrice(productData.price)}</p>
+          <a href='#reviews' className='mt-3 inline-flex items-center gap-2 text-xs text-neutral-600 hover:text-ink'>
+            {productData.reviewCount > 0 ? (
+              <>
+                <Stars value={productData.rating} size={14} />
+                <span>{productData.rating.toFixed(1)} · {productData.reviewCount} {productData.reviewCount === 1 ? 'review' : 'reviews'}</span>
+              </>
+            ) : (
+              <span className='underline underline-offset-4'>Be the first to review</span>
+            )}
+          </a>
           <p className='mt-6 text-sm leading-relaxed text-neutral-600 md:max-w-md'>{productData.description}</p>
 
           {/* Size selector */}
           <fieldset className='mt-8'>
             <legend className='eyebrow text-ink'>Select size</legend>
             <div className='mt-4 flex flex-wrap gap-2'>
-              {[...productData.sizes].sort((a, b) => SIZE_ORDER.indexOf(a) - SIZE_ORDER.indexOf(b)).map((item) => (
-                <button
-                  key={item}
-                  type='button'
-                  onClick={() => { setSize(item); setSizeError(false); }}
-                  aria-pressed={item === size}
-                  className={`min-w-12 border px-4 py-2.5 text-sm transition-colors ${item === size ? 'border-ink bg-ink text-white' : 'border-neutral-300 bg-white text-ink hover:border-ink'}`}
-                >
-                  {item}
-                </button>
-              ))}
+              {[...productData.sizes].sort((a, b) => SIZE_ORDER.indexOf(a) - SIZE_ORDER.indexOf(b)).map((item) => {
+                const soldOutSize = unitsLeft(productData, item) === 0;
+                return (
+                  <button
+                    key={item}
+                    type='button'
+                    onClick={() => { setSize(item); setSizeError(false); }}
+                    disabled={soldOutSize}
+                    aria-pressed={item === size}
+                    aria-label={soldOutSize ? `${item}, sold out` : undefined}
+                    className={`min-w-12 border px-4 py-2.5 text-sm transition-colors disabled:cursor-not-allowed disabled:border-neutral-200 disabled:bg-neutral-50 disabled:text-neutral-400 disabled:line-through ${item === size ? 'border-ink bg-ink text-white' : 'border-neutral-300 bg-white text-ink hover:border-ink'}`}
+                  >
+                    {item}
+                  </button>
+                );
+              })}
             </div>
             {sizeError && <p role='alert' className='mt-3 text-xs text-red-700'>Please select a size to continue.</p>}
+            {size && selectedLeft <= LOW_STOCK && selectedLeft > 0 && (
+              <p role='status' className='mt-3 text-xs text-amber-800'>Only {selectedLeft} left in size {size}.</p>
+            )}
           </fieldset>
 
           <div className='mt-8 flex flex-col gap-3 sm:flex-row'>
-            <button type='button' onClick={onAdd} className='btn-primary flex-1 py-4' aria-live='polite'>
-              {justAdded ? 'Added to bag' : 'Add to bag'}
+            <button type='button' onClick={onAdd} disabled={soldOut} className='btn-primary flex-1 py-4' aria-live='polite'>
+              {soldOut ? 'Sold out' : justAdded ? 'Added to bag' : 'Add to bag'}
             </button>
             {justAdded && <Link to='/cart' className='btn-secondary py-4'>View bag</Link>}
           </div>
@@ -197,6 +220,8 @@ const Product = () => {
           </div>
         </div>
       </div>
+
+      <ProductReviews productId={productData._id} />
 
       {/* dispaly related products */}
       <RelatedProducts category={productData.category} subCategory={productData.subCategory} currentId={productData._id} />

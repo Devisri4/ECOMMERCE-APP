@@ -58,3 +58,14 @@ test("product validation", () => {
   assert.match(validateProductFields({ ...base, sizes: '["XXXL"]' }).error, /size/);
   assert.match(validateProductFields({ ...base, name: " " }).error, /required/);
 });
+
+test("catalogue reprice divides by 3, ends in 99 and keeps the order", async () => {
+  const { repriced } = await import("../scripts/reprice-products.js");
+  assert.equal(repriced(1999), 699);
+  assert.equal(repriced(3699), 1199);
+  assert.equal(repriced(7599), 2499);
+  assert.equal(repriced(500), 299, "never below the minimum");
+  const before = [1999, 2299, 3699, 4599, 6099, 7599];
+  const after = before.map(repriced);
+  assert.deepEqual(after, [...after].sort((a, b) => a - b));
+});

@@ -30,11 +30,15 @@ FOREVER is a portfolio project: the store details are fictional and no orders ar
 - Guest shopping bag that persists across refreshes and merges into the account bag on sign-in
 - Checkout with cash on delivery or Stripe card payments, with client- and server-side validation
 - Account area: profile, password change, order history with status tracking, and cancellation of unpaid orders
+- Stock levels per size: sold-out sizes can't be picked, low stock shows "Only 3 left", and checkout can't oversell
+- Star ratings and reviews (one per customer per product, editable), with a "Verified buyer" badge for customers who ordered the item
 - Newsletter sign-up saved to the database
 - Responsive, keyboard-accessible UI with loading, empty and error states, per-page titles and a 404 page
 
 **Admin panel** (`admin/`)
-- Dashboard with live product, order, revenue and subscriber figures
+- Dashboard with live product, order, revenue and subscriber figures, a daily order-value chart and top products
+  for the last 7, 30 or 90 days
+- Stock per size on the product form, with sold-out and low-stock labels in the product list
 - Read-only demo admin role for portfolio visitors, with customer details masked
 - Add and edit products with up to four images, sizes, category and bestseller flag
 - Order management with status updates
@@ -81,6 +85,6 @@ Templates are provided in each app's `.env.example`. Never commit real `.env` fi
 
 ## Known limitations
 
-- No password reset by email, saved addresses or product reviews.
+- No password reset by email or saved addresses, and no admin moderation screen for reviews.
 - Refunds aren't automated: paid card orders can't be cancelled in the app and are refunded via the Stripe dashboard.
 - Products and orders are loaded in full rather than paginated, which suits a catalogue of this size.

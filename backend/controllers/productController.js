@@ -1,4 +1,5 @@
 import productModel from "../models/productModel.js"
+import reviewModel from "../models/reviewModel.js"
 import { uploadImageBuffer } from "../utils/uploadImage.js"
 import { isCloudinaryConfigured } from "../config/env.js"
 import { sendServerError } from "../utils/http.js"
@@ -11,9 +12,29 @@ const parseJson = (value, fallback) => {
     try { return JSON.parse(value) } catch { return fallback }
 }
 
+const MAX_STOCK = 9999
+
+// Stock arrives as JSON { size: units } for the sizes the admin tracks. Only selected sizes are kept;
+// a size left out isn't tracked. Returns { error } or { stock }.
+const parseStock = (value, sizes) => {
+    const raw = typeof value === "string" ? parseJson(value, null) : value
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { error: "Invalid stock levels" }
+    const stock = {}
+    for (const size of sizes) {
+        if (!Object.hasOwn(raw, size) || raw[size] === "" || raw[size] === null) continue
+        const units = Number(raw[size])
+        if (!Number.isInteger(units) || units < 0 || units > MAX_STOCK) {
+            return { error: `Stock for size ${size} must be a whole number from 0 to ${MAX_STOCK}` }
+        }
+        stock[size] = units
+    }
+    return { stock }
+}
+
 // Shared by add + update. Returns { error } or { fields } with cleaned values.
-// Prices are whole rupees (INR), the store currency.
-export const validateProductFields = ({ name, description, price, category, subCategory, sizes, bestseller }) => {
+// Prices are whole rupees (INR), the store currency. `stock` is optional: when it isn't sent at all,
+// fields.stock is left out so an update keeps the current stock levels.
+export const validateProductFields = ({ name, description, price, category, subCategory, sizes, bestseller, stock }) => {
     const parsedSizes = Array.isArray(sizes) ? sizes : parseJson(sizes, [])
     const numericPrice = Number(price)
 
@@ -25,17 +46,21 @@ export const validateProductFields = ({ name, description, price, category, subC
     if (!Array.isArray(parsedSizes) || parsedSizes.length === 0 || !parsedSizes.every((s) => SIZES.includes(s))) {
         return { error: "Select at least one valid size" }
     }
-    return {
-        fields: {
-            name: name.trim(),
-            description: description.trim(),
-            price: numericPrice,
-            category,
-            subCategory,
-            sizes: parsedSizes,
-            bestseller: bestseller === "true" || bestseller === true,
-        },
+    const fields = {
+        name: name.trim(),
+        description: description.trim(),
+        price: numericPrice,
+        category,
+        subCategory,
+        sizes: parsedSizes,
+        bestseller: bestseller === "true" || bestseller === true,
     }
+    if (stock !== undefined) {
+        const parsed = parseStock(stock, parsedSizes)
+        if (parsed.error) return { error: parsed.error }
+        fields.stock = parsed.stock
+    }
+    return { fields }
 }
 
 const uploadedFiles = (req) => [1, 2, 3, 4].map((n) => req.files?.[`image${n}`]?.[0] || null)
@@ -76,6 +101,8 @@ const listProducts = async (req, res) => {
 const removeProduct = async (req, res) => {
     try {
         await productModel.findByIdAndDelete(req.body.id)
+        // Its reviews go with it (reviews store the product id as a string)
+        if (typeof req.body.id === "string") await reviewModel.deleteMany({ productId: req.body.id })
         res.json({success: true, message: "Product Removed"})
     } catch (error) {
         sendServerError(res, error, "Couldn't remove the product. Please try again.")

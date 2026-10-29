@@ -5,6 +5,7 @@ import Title from '../components/Title';
 import CartTotal from '../components/CartTotal';
 import { optimizeImage } from '../utils/image';
 import { formatPrice } from '../utils/currency';
+import { LOW_STOCK, unitsLeft } from '../utils/stock';
 
 // Matches the server-side limit in orderController.buildOrderItems
 const MAX_QTY = 99;
@@ -59,7 +60,9 @@ const Cart = () => {
         <div className='grid gap-12 lg:grid-cols-[minmax(0,1fr)_380px]'>
           {/* Items */}
           <ul className='border-t border-neutral-200'>
-            {cartData.map(({ product, size, quantity }) => (
+            {cartData.map(({ product, size, quantity }) => {
+              const left = unitsLeft(product, size);
+              return (
               <li key={`${product._id}-${size}`} className='flex gap-4 border-b border-neutral-200 py-6 sm:gap-6'>
                 <Link to={`/product/${product._id}`} className='w-24 shrink-0 sm:w-28'>
                   <img
@@ -91,12 +94,21 @@ const Cart = () => {
                         type='button'
                         className={stepButton}
                         onClick={() => updateQuantity(product._id, size, quantity + 1)}
-                        disabled={quantity >= MAX_QTY}
+                        disabled={quantity >= Math.min(MAX_QTY, left)}
                         aria-label='Increase quantity'
                       >
                         +
                       </button>
                     </div>
+                    {/* Stock may have changed since the item was added; checkout re-checks on the server */}
+                    {quantity > left && (
+                      <p role='alert' className='mt-2 text-xs text-red-700'>
+                        {left === 0 ? 'This size is now sold out. Please remove it to check out.' : `Only ${left} left. Please lower the quantity to check out.`}
+                      </p>
+                    )}
+                    {quantity <= left && left <= LOW_STOCK && (
+                      <p className='mt-2 text-xs text-amber-800'>Only {left} left in this size.</p>
+                    )}
                   </div>
 
                   <div className='flex items-end justify-between gap-4 sm:flex-col sm:items-end'>
@@ -111,7 +123,8 @@ const Cart = () => {
                   </div>
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
 
           {/* Summary */}

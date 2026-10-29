@@ -8,7 +8,7 @@ import ProductForm from '../components/ProductForm';
 const Add = ({token})=>{
 
   // Same request as before: multipart with image1–image4 and the product fields
-  const onSubmit = async ({ name, description, price, category, subCategory, bestseller, sizes, slots }) => {
+  const onSubmit = async ({ name, description, price, category, subCategory, bestseller, sizes, slots, stock }) => {
     try {
       const formData = new FormData()
 
@@ -19,6 +19,7 @@ const Add = ({token})=>{
       formData.append("subCategory", subCategory)
       formData.append("bestseller", bestseller)
       formData.append("sizes", JSON.stringify(sizes))
+      formData.append("stock", JSON.stringify(stock))
       slots.forEach((slot, i) => slot.file && formData.append(`image${i + 1}`, slot.file))
 
       const response = await axios.post(backendUrl + "/api/product/add",formData,{headers:{token}})

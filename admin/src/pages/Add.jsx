@@ -5,7 +5,7 @@ import { toast } from 'react-toastify';
 import { friendlyError } from '../utils/messages';
 import ProductForm from '../components/ProductForm';
 
-const Add = ({token})=>{
+const Add = ({token, demo = false})=>{
 
   // Same request as before: multipart with image1–image4 and the product fields
   const onSubmit = async ({ name, description, price, category, subCategory, bestseller, sizes, slots, stock }) => {
@@ -44,6 +44,7 @@ const Add = ({token})=>{
       submittingLabel='Adding product…'
       onSubmit={onSubmit}
       resetOnSuccess
+      readOnly={demo}
     />
   )
 }

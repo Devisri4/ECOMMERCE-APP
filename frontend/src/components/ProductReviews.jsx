@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'react-toastify';
@@ -39,14 +39,21 @@ const ProductReviews = ({ productId }) => {
   const [comment, setComment] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // The product being shown right now. Replies for a product the shopper has already left are
+  // dropped, so quick clicks through "You may also like" never show another product's reviews.
+  const currentId = useRef(productId);
+  currentId.current = productId;
+
   const load = async () => {
+    const id = productId;
     setLoadError(false);
     try {
-      const res = await axios.get(backendUrl + '/api/review/list', { params: { productId } });
+      const res = await axios.get(backendUrl + '/api/review/list', { params: { productId: id } });
+      if (currentId.current !== id) return;
       if (res.data.success) setData(res.data);
       else setLoadError(true);
     } catch {
-      setLoadError(true);
+      if (currentId.current === id) setLoadError(true);
     }
   };
 
@@ -59,15 +66,17 @@ const ProductReviews = ({ productId }) => {
   useEffect(() => {
     setMine(null); setRating(0); setComment('');
     if (!token) return;
+    let active = true;
     axios.post(backendUrl + '/api/review/mine', { productId }, { headers: { token } })
       .then((res) => {
-        if (res.data.success && res.data.review) {
+        if (active && res.data.success && res.data.review) {
           setMine(res.data.review);
           setRating(res.data.review.rating);
           setComment(res.data.review.comment || '');
         }
       })
       .catch(() => {});
+    return () => { active = false; };
   }, [productId, token, backendUrl]);
 
   const applySummary = (res) => {

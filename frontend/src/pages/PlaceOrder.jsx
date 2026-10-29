@@ -35,8 +35,15 @@ const PlaceOrder = () => {
     setCartItems,
     getCartAmount,
     delivery_fee,
-    products
+    products,
+    productsLoading,
+    cartLoaded
   } = useContext(ShopContext)
+
+  // Bag lines for products that still exist (deleted products are skipped, as on the Cart page)
+  const bagLines = Object.entries(cartItems).filter(
+    ([id, sizes]) => products.some((p) => p._id === id) && Object.values(sizes).some((q) => q > 0)
+  ).length
 
   const [formData, setFormData] = useState(EMPTY_ADDRESS)
   const [savedAddresses, setSavedAddresses] = useState([])
@@ -197,6 +204,27 @@ const PlaceOrder = () => {
   }
 
   if (!token) return null
+
+  // Wait for the products and the account bag, so a refresh never shows a ₹0 total or "bag empty" by mistake
+  if (productsLoading || !cartLoaded) {
+    return (
+      <div role='status' className='grid gap-12 border-t border-neutral-200 pt-10 sm:pt-14 lg:grid-cols-[minmax(0,1fr)_420px]'>
+        <span className='sr-only'>Loading checkout…</span>
+        <div aria-hidden='true' className='h-96 animate-pulse bg-neutral-200/70' />
+        <div aria-hidden='true' className='h-64 animate-pulse bg-neutral-200/70' />
+      </div>
+    )
+  }
+
+  if (bagLines === 0) {
+    return (
+      <div className='border-t border-neutral-200 py-24 text-center'>
+        <p className='font-display text-3xl text-ink'>Your bag is empty</p>
+        <p className='mt-3 text-sm text-neutral-600'>Add something you love, then come back to check out.</p>
+        <button type='button' onClick={() => navigate('/collection')} className='btn-primary mt-8'>Browse the collection</button>
+      </div>
+    )
+  }
 
   return (
     <form

@@ -1,4 +1,5 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
+import useDrawerFocus from '../hooks/useDrawerFocus';
 import { assets } from "../assets/assets";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { ShopContext } from '../context/ShopContext';
@@ -14,6 +15,8 @@ const iconButton = 'flex h-10 w-10 items-center justify-center transition-opacit
 
 const Navbar = () => {
   const [visible, setVisible] = useState(false); // mobile drawer hidden by default
+  const drawerRef = useRef(null);
+  useDrawerFocus(visible, drawerRef);
   const [scrolled, setScrolled] = useState(false);
   const { pathname } = useLocation();
 
@@ -151,6 +154,7 @@ const Navbar = () => {
         />
         <nav
           id="mobile-menu"
+          ref={drawerRef}
           aria-label="Mobile"
           inert={!visible}
           className={`absolute right-0 top-0 flex h-full w-[85%] max-w-sm flex-col bg-paper transition-transform duration-300 ease-out ${visible ? 'translate-x-0' : 'translate-x-full'}`}

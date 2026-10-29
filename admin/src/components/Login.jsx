@@ -110,7 +110,7 @@ return (
                 </form>
             </div>
 
-            <p className='mt-6 text-center text-xs text-zinc-500'>Shopping on FOREVER? Customers sign in on the main store.</p>
+            <p className='mt-6 text-center text-xs text-zinc-400'>Shopping on FOREVER? Customers sign in on the main store.</p>
         </div>
     </main>
 )

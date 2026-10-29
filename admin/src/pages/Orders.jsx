@@ -4,6 +4,8 @@ import { toast } from 'react-toastify'
 import { friendlyError } from '../utils/messages'
 import { backendUrl } from '../App'
 import { formatPrice, orderCurrency } from '../utils/currency'
+import { formatDate } from '../utils/date'
+import { DEMO_DISABLED } from '../utils/session'
 
 const STATUSES = ['Order Placed', 'Packing', 'Shipped', 'Out for delivery', 'Delivered', 'Cancelled']
 
@@ -12,9 +14,10 @@ const statusTone = (status) =>
     : status === 'Delivered' ? 'bg-emerald-500/10 text-emerald-300'
     : 'bg-violet-500/10 text-violet-300'
 
-const Orders = ({ token }) => {
+const Orders = ({ token, demo = false }) => {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false) // a failed load must not look like "no orders"
   const [updatingId, setUpdatingId] = useState(null)
 
   const fetchAllOrders = async () => {
@@ -29,9 +32,13 @@ const Orders = ({ token }) => {
 
       if (response.data.success) {
         setOrders(response.data.orders) // the API returns newest first
+        setLoadError(false)
+      } else {
+        setLoadError(true)
       }
     } catch (error) {
-      toast.error(friendlyError(error, 'Couldn’t load orders. Please try again.'))
+      console.log(error)
+      setLoadError(true)
     } finally {
       setLoading(false)
     }
@@ -46,6 +53,7 @@ const Orders = ({ token }) => {
         await fetchAllOrders()
       } else {
         toast.error(friendlyError(response.data.message, "Couldn’t update the order status. Please try again."))
+        await fetchAllOrders() // e.g. "changed a moment ago": show the order as it is now
       }
     } catch (error) {
       console.log(error)
@@ -62,13 +70,18 @@ const Orders = ({ token }) => {
   return (
     <div>
       <h1 className="text-2xl font-semibold text-white">Orders</h1>
-      <p className="mt-1 text-sm text-zinc-400">{loading ? 'Loading…' : `${orders.length} orders, newest first`}</p>
+      <p className="mt-1 text-sm text-zinc-400">{loading ? 'Loading…' : loadError ? 'Orders couldn’t be loaded' : `${orders.length} orders, newest first`}</p>
 
       <div className="mt-6 flex flex-col gap-4">
         {loading ? (
           [0, 1].map((i) => <div key={i} aria-hidden="true" className="h-40 animate-pulse rounded-xl border border-zinc-800 bg-zinc-800/40" />)
+        ) : loadError ? (
+          <div role="alert" className="rounded-xl border border-zinc-800 bg-[#202024] p-10 text-center">
+            <p className="text-sm text-zinc-400">Couldn’t load orders.</p>
+            <button type="button" onClick={() => { setLoading(true); fetchAllOrders() }} className="mt-5 rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500">Try again</button>
+          </div>
         ) : orders.length === 0 ? (
-          <p className="rounded-xl border border-zinc-800 bg-[#202024] px-5 py-12 text-center text-sm text-zinc-500">No orders yet.</p>
+          <p className="rounded-xl border border-zinc-800 bg-[#202024] px-5 py-12 text-center text-sm text-zinc-400">No orders yet.</p>
         ) : orders.map((order) => (
           <article
             key={order._id}
@@ -77,7 +90,7 @@ const Orders = ({ token }) => {
             {/* Items */}
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-xs text-zinc-500">#{order._id.slice(-8).toUpperCase()}</span>
+                <span className="font-mono text-xs text-zinc-400">#{order._id.slice(-8).toUpperCase()}</span>
                 <span className={`rounded-full px-2.5 py-0.5 text-xs ${statusTone(order.status)}`}>{order.status}</span>
               </div>
               <ul className="mt-3 flex flex-col gap-2">
@@ -85,7 +98,7 @@ const Orders = ({ token }) => {
                   <li key={i} className="flex items-center gap-3">
                     <img src={item.image?.[0]} alt="" className="h-12 w-10 shrink-0 rounded bg-zinc-800 object-cover" loading="lazy" />
                     <span className="text-zinc-200">
-                      {item.name} <span className="text-zinc-500">× {item.quantity} · {item.size}</span>
+                      {item.name} <span className="text-zinc-400">× {item.quantity} · {item.size}</span>
                     </span>
                   </li>
                 ))}
@@ -107,17 +120,18 @@ const Orders = ({ token }) => {
               <p className={order.payment ? 'text-emerald-300' : 'text-amber-300'}>
                 {order.payment ? 'Paid' : order.paymentMethod === 'COD' ? 'Collect on delivery' : 'Card payment not completed'}
               </p>
-              <p className="mt-1">{new Date(order.date).toLocaleDateString()}</p>
+              <p className="mt-1">{formatDate(order.date)}</p>
             </div>
 
             {/* Status */}
             <div>
-              <label htmlFor={`status-${order._id}`} className="mb-2 block text-xs font-medium uppercase tracking-[0.14em] text-zinc-500">Status</label>
+              <label htmlFor={`status-${order._id}`} className="mb-2 block text-xs font-medium uppercase tracking-[0.14em] text-zinc-400">Status</label>
               <select
                 id={`status-${order._id}`}
                 onChange={(event)=>statusHandler(event,order._id)}
                 value={order.status}
-                disabled={updatingId === order._id}
+                disabled={demo || updatingId === order._id}
+                title={demo ? DEMO_DISABLED : undefined}
                 className="w-full px-3 py-2.5 font-medium disabled:opacity-60"
               >
                 {STATUSES.map((s) => {

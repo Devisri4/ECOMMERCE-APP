@@ -9,10 +9,20 @@ const linkButton = 'text-xs uppercase tracking-[0.16em] text-neutral-600 underli
 
 // Saved products. Choosing a size happens on the product page, so "Choose size" links there.
 const WishlistPanel = () => {
-  const { wishlist, products, productsLoading, toggleWishlist } = useContext(ShopContext)
+  const { wishlist, products, productsLoading, productsError, getProductsData, toggleWishlist } = useContext(ShopContext)
 
   if (productsLoading) {
     return <div role='status' className='h-40 animate-pulse bg-neutral-200/70'><span className='sr-only'>Loading your wishlist…</span></div>
+  }
+
+  // Without the catalogue nothing can be shown, which must not read as "your wishlist is empty"
+  if (productsError) {
+    return (
+      <div role='alert' className='border border-neutral-200 bg-white px-6 py-14 text-center'>
+        <p className='text-sm text-neutral-600'>We couldn’t load your wishlist right now.</p>
+        <button type='button' onClick={getProductsData} className='btn-secondary mt-6'>Try again</button>
+      </div>
+    )
   }
 
   // Products deleted from the store since they were saved are skipped

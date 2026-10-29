@@ -85,13 +85,13 @@ const Product = () => {
   const soldOut = isSoldOut(productData);
   const selectedLeft = size ? unitsLeft(productData, size) : Infinity;
 
-  const onAdd = () => {
+  const onAdd = async () => {
     if (!size) {
       setSizeError(true);
       return;
     }
-    addToCart(productData._id, size);
-    setJustAdded(true);
+    // Only confirm once the bag accepted it (it can refuse, e.g. no more units left in this size)
+    if (await addToCart(productData._id, size)) setJustAdded(true);
   };
 
   const onZoomMove = (e) => {

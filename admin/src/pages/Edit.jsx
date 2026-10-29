@@ -7,7 +7,7 @@ import { friendlyError } from '../utils/messages';
 import ProductForm from '../components/ProductForm';
 
 // Loads the product via the existing public /api/product/single endpoint, saves via /api/product/update (admin only)
-const Edit = ({ token }) => {
+const Edit = ({ token, demo = false }) => {
   const { productId } = useParams();
   const navigate = useNavigate();
   const [product, setProduct] = useState(null);
@@ -15,6 +15,9 @@ const Edit = ({ token }) => {
 
   useEffect(() => {
     let cancelled = false;
+    // A different product id (back/forward, pasted URL): show its loading state, never the previous form
+    setStatus('loading');
+    setProduct(null);
     const load = async () => {
       try {
         const res = await axios.post(backendUrl + '/api/product/single', { productId });
@@ -92,6 +95,8 @@ const Edit = ({ token }) => {
     <div>
       <Link to='/list' className='mb-6 inline-block text-sm text-zinc-400 hover:text-white'>← Back to products</Link>
       <ProductForm
+        key={productId}
+        readOnly={demo}
         initial={{
           name: product.name,
           description: product.description,

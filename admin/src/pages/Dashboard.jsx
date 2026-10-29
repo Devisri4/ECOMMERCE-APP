@@ -4,6 +4,7 @@ import axios from 'axios'
 import { backendUrl } from '../App'
 import { formatPrice, orderCurrency } from '../utils/currency'
 import SalesCharts from '../components/SalesCharts'
+import { formatDate } from '../utils/date'
 
 // Overview computed from the existing product list + admin order list endpoints (no new APIs, no mock data)
 const Dashboard = ({ token }) => {
@@ -74,9 +75,9 @@ const Dashboard = ({ token }) => {
         {stats
           ? stats.map((s) => (
               <div key={s.label} className='rounded-xl border border-zinc-800 bg-[#202024] p-5'>
-                <p className='text-xs font-medium uppercase tracking-[0.16em] text-zinc-500'>{s.label}</p>
+                <p className='text-xs font-medium uppercase tracking-[0.16em] text-zinc-400'>{s.label}</p>
                 <p className='mt-3 text-3xl font-semibold text-white'>{s.value}</p>
-                <p className='mt-1 text-xs text-zinc-500'>{s.hint}</p>
+                <p className='mt-1 text-xs text-zinc-400'>{s.hint}</p>
               </div>
             ))
           : [0, 1, 2, 3, 4].map((i) => <div key={i} aria-hidden='true' className='h-32 animate-pulse rounded-xl border border-zinc-800 bg-zinc-800/40' />)}
@@ -90,16 +91,16 @@ const Dashboard = ({ token }) => {
           <Link to='/orders' className='text-xs font-medium text-violet-300 hover:text-violet-200'>View all</Link>
         </div>
         {!data ? (
-          <p className='px-5 py-8 text-sm text-zinc-500'>Loading…</p>
+          <p className='px-5 py-8 text-sm text-zinc-400'>Loading…</p>
         ) : recent.length === 0 ? (
-          <p className='px-5 py-8 text-sm text-zinc-500'>No orders yet.</p>
+          <p className='px-5 py-8 text-sm text-zinc-400'>No orders yet.</p>
         ) : (
           <ul className='divide-y divide-zinc-800'>
             {recent.map((o) => (
               <li key={o._id} className='flex flex-wrap items-center justify-between gap-3 px-5 py-3 text-sm'>
                 <span className='font-mono text-xs text-zinc-400'>#{o._id.slice(-8).toUpperCase()}</span>
                 <span className='text-zinc-300'>{o.address?.firstName} {o.address?.lastName}</span>
-                <span className='text-zinc-400'>{new Date(o.date).toLocaleDateString()}</span>
+                <span className='text-zinc-400'>{formatDate(o.date)}</span>
                 <span className='text-zinc-200'>{formatPrice(o.amount, orderCurrency(o))}</span>
                 <span className={`rounded-full px-2.5 py-0.5 text-xs ${o.status === 'Cancelled' ? 'bg-red-500/10 text-red-300' : o.status === 'Delivered' ? 'bg-emerald-500/10 text-emerald-300' : 'bg-violet-500/10 text-violet-300'}`}>
                   {o.status}

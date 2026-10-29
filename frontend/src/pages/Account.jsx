@@ -303,7 +303,8 @@ const Account = () => {
         </nav>
 
         {/* Panel */}
-        <section aria-live='polite'>
+        {/* Not a live region: re-reading whole order lists on every tab change is noise for screen readers */}
+        <section>
           {tab === 'orders' ? (
             <OrderHistory />
           ) : tab === 'wishlist' ? (
@@ -320,7 +321,7 @@ const Account = () => {
               <button type='button' onClick={loadProfile} className='btn-secondary mt-6'>Try again</button>
             </div>
           ) : tab === 'overview' ? (
-            <AccountOverview />
+            <AccountOverview demo={profile.demo} />
           ) : tab === 'addresses' ? (
             <SavedAddresses demo={profile.demo} />
           ) : profile.demo ? (

@@ -20,7 +20,13 @@ const toStockInputs = (stock = {}) => Object.fromEntries(Object.entries(stock ||
 // Shared by Add and Edit. Each of the 4 image slots holds either a new File, an existing URL, or nothing.
 // onSubmit({ ...fields, slots, stock }) must resolve to true on success; stock only has the selected
 // sizes whose box was filled in, e.g. { S: 4, M: 0 }.
-const ProductForm = ({ initial = EMPTY, title, subtitle, submitLabel, submittingLabel, onSubmit, resetOnSuccess = false }) => {
+// Upload limits: the API accepts images up to 4 MB each (backend/middleware/multer.js), and the host
+// (Vercel) rejects a whole request above ~4.5 MB, so the new images together must stay under 4 MB.
+const MB = 1024 * 1024;
+const MAX_IMAGE_BYTES = 4 * MB;
+const MAX_UPLOAD_BYTES = 4 * MB;
+
+const ProductForm = ({ initial = EMPTY, title, subtitle, submitLabel, submittingLabel, onSubmit, resetOnSuccess = false, readOnly = false }) => {
   const toSlots = (images = []) => [0, 1, 2, 3].map((i) => ({ file: null, url: images[i] || null }));
 
   const [name, setName] = useState(initial.name);
@@ -53,10 +59,16 @@ const ProductForm = ({ initial = EMPTY, title, subtitle, submitLabel, submitting
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (submitting) return;
+    if (submitting || readOnly) return;
 
     // The backend needs at least one image and one size to keep a usable product
     if (!slots.some((s) => s.file || s.url)) return toast.error('Please add at least one image.');
+    const newFiles = slots.map((s) => s.file).filter(Boolean);
+    const tooBig = newFiles.find((f) => f.size > MAX_IMAGE_BYTES);
+    if (tooBig) return toast.error(`“${tooBig.name}” is larger than 4 MB. Please use a smaller image.`);
+    if (newFiles.reduce((sum, f) => sum + f.size, 0) > MAX_UPLOAD_BYTES) {
+      return toast.error('The new images add up to more than 4 MB. Save fewer at once, or use smaller images.');
+    }
     if (sizes.length === 0) return toast.error('Please select at least one size.');
     if (!(Number(price) > 0)) return toast.error('Please enter a price greater than 0.');
 
@@ -80,7 +92,7 @@ const ProductForm = ({ initial = EMPTY, title, subtitle, submitLabel, submitting
       </div>
 
       <section className={cardClass}>
-        <p className={labelClass}>Images <span className='normal-case tracking-normal text-zinc-500'>(up to 4, first is the cover)</span></p>
+        <p className={labelClass}>Images <span className='normal-case tracking-normal text-zinc-400'>(up to 4, first is the cover; under 4 MB in total per save)</span></p>
         <div className='flex flex-wrap gap-3'>
           {slots.map((slot, i) => {
             const src = previews[i] || thumb(slot.url);
@@ -93,7 +105,11 @@ const ProductForm = ({ initial = EMPTY, title, subtitle, submitLabel, submitting
                   <img className={src ? 'h-full w-full object-cover' : 'w-12 opacity-60'} src={src || assets.upload_area} alt={src ? `Image ${i + 1} preview` : ''} />
                   <span className='sr-only'>{src ? `Replace image ${i + 1}` : `Upload image ${i + 1}`}</span>
                   <input
-                    onChange={(e) => e.target.files[0] && setSlot(i, { file: e.target.files[0], url: null })}
+                    onChange={(e) => {
+                      if (e.target.files[0]) setSlot(i, { file: e.target.files[0], url: null });
+                      // Clear the input so picking the same file again (e.g. after removing it) still registers
+                      e.target.value = '';
+                    }}
                     type="file"
                     accept='image/*'
                     id={`image${i + 1}`}
@@ -169,7 +185,7 @@ const ProductForm = ({ initial = EMPTY, title, subtitle, submitLabel, submitting
         {orderedSizes.length > 0 && (
           <fieldset>
             <legend className={labelClass}>
-              Stock per size <span className='normal-case tracking-normal text-zinc-500'>(leave empty to not track a size)</span>
+              Stock per size <span className='normal-case tracking-normal text-zinc-400'>(leave empty to not track a size)</span>
             </legend>
             <div className='flex flex-wrap gap-3'>
               {orderedSizes.map((size) => (
@@ -182,7 +198,7 @@ const ProductForm = ({ initial = EMPTY, title, subtitle, submitLabel, submitting
                     onChange={(e) => setStockInput(size, e.target.value)}
                     placeholder='Not tracked'
                     aria-label={`Units in stock, size ${size}`}
-                    className='w-full px-3 py-2 text-sm placeholder:text-zinc-600'
+                    className='w-full px-3 py-2 text-sm placeholder:text-zinc-500'
                   />
                 </label>
               ))}
@@ -196,10 +212,11 @@ const ProductForm = ({ initial = EMPTY, title, subtitle, submitLabel, submitting
         </label>
       </section>
 
-      <div>
-        <button type="submit" disabled={submitting} className='rounded-md bg-violet-600 px-8 py-3 text-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60'>
+      <div className='flex flex-wrap items-center gap-4'>
+        <button type="submit" disabled={submitting || readOnly} className='rounded-md bg-violet-600 px-8 py-3 text-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60'>
           {submitting ? submittingLabel : submitLabel}
         </button>
+        {readOnly && <p className='text-sm text-amber-300'>Saving is disabled in the read-only demo.</p>}
       </div>
     </form>
   );

@@ -11,7 +11,7 @@ import Login from './components/Login'
 import { ToastContainer, toast } from 'react-toastify';
 import axios from 'axios';
 import 'react-toastify/dist/ReactToastify.css';
-import { isDemoToken } from './utils/session'
+import { isDemoToken, tokenExpiresAt } from './utils/session'
 
 // A deployed build never silently falls back to localhost: VITE_BACKEND_URL must be set in production
 export const backendUrl = (
@@ -45,6 +45,15 @@ useEffect(() => {
   };
   return () => { onSessionExpired = () => {} };
 }, []);
+
+  // Sign out as soon as the token expires (the demo admin's lasts 2 hours), instead of waiting for a
+  // request to be refused. The server still checks every request; this only keeps the UI honest.
+  useEffect(() => {
+    const ms = tokenExpiresAt(token) - Date.now()
+    if (!token || !Number.isFinite(ms)) return
+    const timer = setTimeout(() => onSessionExpired(), Math.max(0, ms))
+    return () => clearTimeout(timer)
+  }, [token])
 
   const demo = token !== '' && isDemoToken(token)
 
@@ -80,10 +89,10 @@ useEffect(() => {
             <main className='min-w-0 flex-1 px-4 py-8 text-base sm:px-8 lg:px-10'>
               <Routes>
                 <Route path='/' element={<Dashboard token={token} />} />
-                <Route path='/add' element={<Add token={token} />} />
-                <Route path='/list' element={<List token={token} />} />
-                <Route path='/edit/:productId' element={<Edit token={token} />} />
-                <Route path='/orders' element={<Orders token={token} />} />
+                <Route path='/add' element={<Add token={token} demo={demo} />} />
+                <Route path='/list' element={<List token={token} demo={demo} />} />
+                <Route path='/edit/:productId' element={<Edit token={token} demo={demo} />} />
+                <Route path='/orders' element={<Orders token={token} demo={demo} />} />
                 <Route path='*' element={<Navigate to='/' replace />} />
               </Routes>
             </main>

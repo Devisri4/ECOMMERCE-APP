@@ -7,7 +7,6 @@ const BAR = '#8b5cf6'
 const BAR_ACTIVE = '#a78bfa'
 const GRID = '#2e2e33'
 const RANGES = [7, 30, 90]
-const DAY = 24 * 60 * 60 * 1000
 
 // Short rupee amounts in Indian units: ₹950, ₹12.5K, ₹3.2L (lakh), ₹1.1Cr (crore).
 // (Intl's en-IN compact notation writes thousands as "T", which reads like trillions.)
@@ -49,24 +48,32 @@ const useElementWidth = () => {
   return [ref, width]
 }
 
+// Calendar days in local time. Built from year/month/day (not by adding 24 hours), so days stay
+// correct across daylight-saving changes, when a day can be 23 or 25 hours long.
+const dayKey = (ms) => {
+  const d = new Date(ms)
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+}
+
 // Midnight (local time) at the start of the range: today plus the previous days - 1 days
 const rangeStart = (days) => {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return today.getTime() - (days - 1) * DAY
+  const now = new Date()
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1)).getTime()
 }
 
 // Daily buckets for the last `days` days (local time), from non-cancelled INR orders
 const dailyTotals = (orders, days) => {
-  const start = rangeStart(days)
-  const buckets = Array.from({ length: days }, (_, i) => ({ date: start + i * DAY, value: 0, orders: 0 }))
+  const now = new Date()
+  const buckets = Array.from({ length: days }, (_, i) => {
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1 - i)).getTime()
+    return { date, value: 0, orders: 0 }
+  })
+  const byKey = new Map(buckets.map((b) => [dayKey(b.date), b]))
   for (const o of orders) {
-    const d = new Date(o.date)
-    d.setHours(0, 0, 0, 0)
-    const i = Math.round((d.getTime() - start) / DAY)
-    if (i >= 0 && i < days) {
-      buckets[i].value += o.amount
-      buckets[i].orders += 1
+    const bucket = byKey.get(dayKey(o.date))
+    if (bucket) {
+      bucket.value += o.amount
+      bucket.orders += 1
     }
   }
   return buckets
@@ -119,7 +126,7 @@ const DailyChart = ({ data }) => {
           {ticks.map((t) => (
             <g key={t}>
               <line x1={pad.left} x2={width - pad.right} y1={y(t)} y2={y(t)} stroke={GRID} strokeWidth='1' />
-              <text x={pad.left - 8} y={y(t)} dy='0.32em' textAnchor='end' className='fill-zinc-500 text-[11px] tabular-nums'>
+              <text x={pad.left - 8} y={y(t)} dy='0.32em' textAnchor='end' className='fill-zinc-400 text-[11px] tabular-nums'>
                 {tickLabel(t)}
               </text>
             </g>
@@ -147,7 +154,7 @@ const DailyChart = ({ data }) => {
               y={height - 6}
               textAnchor={i === 0 ? 'start' : i === data.length - 1 ? 'end' : 'middle'}
               dx={i === 0 ? -slot / 2 + (slot - barW) / 2 : i === data.length - 1 ? slot / 2 - (slot - barW) / 2 : 0}
-              className='fill-zinc-500 text-[11px]'
+              className='fill-zinc-400 text-[11px]'
             >
               {dayLabel(data[i].date)}
             </text>
@@ -224,13 +231,12 @@ const SalesCharts = ({ orders }) => {
       {/* One date-range control above both charts; it scopes everything below it */}
       <div className='flex flex-wrap items-center justify-between gap-3'>
         <h2 id='sales-heading' className='text-sm font-semibold text-white'>Sales</h2>
-        <div role='radiogroup' aria-label='Date range' className='inline-flex rounded-md border border-zinc-800 bg-[#202024] p-0.5'>
+        <div role='group' aria-label='Date range' className='inline-flex rounded-md border border-zinc-800 bg-[#202024] p-0.5'>
           {RANGES.map((r) => (
             <button
               key={r}
               type='button'
-              role='radio'
-              aria-checked={days === r}
+              aria-pressed={days === r}
               onClick={() => setDays(r)}
               className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${days === r ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}
             >
@@ -243,12 +249,12 @@ const SalesCharts = ({ orders }) => {
       <div className='mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]'>
         <div className='rounded-xl border border-zinc-800 bg-[#202024] p-5'>
           <h3 className='text-sm font-medium text-white'>Order value per day</h3>
-          <p className='mt-1 text-xs text-zinc-500'>
+          <p className='mt-1 text-xs text-zinc-400'>
             {formatPrice(total, 'INR')} from {count} {count === 1 ? 'order' : 'orders'} · excludes cancelled orders
           </p>
           <div className='mt-5'>
             {count === 0 ? (
-              <p className='py-16 text-center text-sm text-zinc-500'>No orders in the last {days} days.</p>
+              <p className='py-16 text-center text-sm text-zinc-400'>No orders in the last {days} days.</p>
             ) : (
               <DailyChart data={daily} />
             )}
@@ -258,7 +264,7 @@ const SalesCharts = ({ orders }) => {
               <summary className='cursor-pointer select-none hover:text-white'>View as table</summary>
               <div className='mt-3 max-h-60 overflow-y-auto'>
                 <table className='w-full text-left'>
-                  <thead className='text-zinc-500'>
+                  <thead className='text-zinc-400'>
                     <tr><th className='py-1 font-medium'>Day</th><th className='py-1 text-right font-medium'>Orders</th><th className='py-1 text-right font-medium'>Order value</th></tr>
                   </thead>
                   <tbody className='tabular-nums'>
@@ -278,9 +284,9 @@ const SalesCharts = ({ orders }) => {
 
         <div className='rounded-xl border border-zinc-800 bg-[#202024] p-5'>
           <h3 className='text-sm font-medium text-white'>Top products</h3>
-          <p className='mt-1 text-xs text-zinc-500'>By units sold, last {days} days</p>
+          <p className='mt-1 text-xs text-zinc-400'>By units sold, last {days} days</p>
           <div className='mt-5'>
-            {top.length === 0 ? <p className='py-16 text-center text-sm text-zinc-500'>No sales yet.</p> : <TopProducts rows={top} />}
+            {top.length === 0 ? <p className='py-16 text-center text-sm text-zinc-400'>No sales yet.</p> : <TopProducts rows={top} />}
           </div>
         </div>
       </div>

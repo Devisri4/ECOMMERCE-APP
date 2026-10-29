@@ -1,4 +1,4 @@
-import React, { createContext, useEffect, useState } from 'react';
+import React, { createContext, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -112,13 +112,21 @@ const ShopContextProvider = ({ children }) => {
     }, []);
 
     /* ---------------- CART ---------------- */
-    const getUserCart = async (currentToken) => {
+    // Mirror of cartItems that is updated immediately (state updates only land on the next render),
+    // so several quick "Add to bag" clicks are all checked against the stock limit
+    const cartRef = useRef(cartItems);
+    useEffect(() => { cartRef.current = cartItems; }, [cartItems]);
+
+    // isCurrent() turns false if the shopper signs out (or the session ends) while this is loading,
+    // so a late reply never puts account data back into the signed-out bag
+    const getUserCart = async (currentToken, isCurrent) => {
         try {
             const res = await axios.post(
                 backendUrl + '/api/cart/get',
                 {},
                 { headers: { token: currentToken } }
             );
+            if (!isCurrent()) return;
             if (res.data.success) {
                 const merged = structuredClone(res.data.cartData || {});
                 const guestCart = readGuestCart();
@@ -138,27 +146,41 @@ const ShopContextProvider = ({ children }) => {
                 }
 
                 setCartItems(merged);
+                if (updates.length === 0) return;
 
-                // Sequential: each update rewrites the whole server cart, so parallel calls would race
+                // Sequential: each update rewrites the whole server cart, so parallel calls would race.
+                // The server may refuse a line (e.g. less stock left than the guest bag held).
+                const refused = [];
                 for (const update of updates) {
-                    await axios.post(backendUrl + '/api/cart/update', update, { headers: { token: currentToken } });
+                    const result = await axios.post(backendUrl + '/api/cart/update', update, { headers: { token: currentToken } });
+                    if (!result.data.success) refused.push(result.data.message);
                 }
                 localStorage.removeItem(GUEST_CART_KEY);
+
+                // Show exactly what the account bag now holds
+                const saved = await axios.post(backendUrl + '/api/cart/get', {}, { headers: { token: currentToken } });
+                if (!isCurrent()) return;
+                if (saved.data.success) setCartItems(saved.data.cartData || {});
+                if (refused.length) {
+                    toast.info(friendlyError(refused[0], 'Some items from before you signed in couldn’t be added to your bag.'), { toastId: 'merge-refused' });
+                }
             }
         } catch (err) {
             console.log(err);
         } finally {
-            setCartLoaded(true);
+            if (isCurrent()) setCartLoaded(true);
         }
     };
 
     useEffect(() => {
+        let active = true;
         if (token) {
-            getUserCart(token);
+            getUserCart(token, () => active);
         } else {
             setCartItems(readGuestCart());
             setCartLoaded(true);
         }
+        return () => { active = false; };
     }, [token]);
 
     // Persist the guest cart so it survives refreshes and navigation
@@ -178,17 +200,19 @@ const ShopContextProvider = ({ children }) => {
             setWishlist(readGuestWishlist());
             return;
         }
+        let active = true; // ignore the reply if the shopper signs out before it arrives
         const guest = readGuestWishlist();
         const request = guest.length
             ? axios.post(backendUrl + '/api/user/wishlist/merge', { productIds: guest }, { headers: { token } })
             : axios.post(backendUrl + '/api/user/wishlist', {}, { headers: { token } });
         request
             .then((res) => {
-                if (!res.data.success) return;
+                if (!active || !res.data.success) return;
                 setWishlist(res.data.wishlist);
                 localStorage.removeItem(GUEST_WISHLIST_KEY);
             })
             .catch((err) => console.log(err));
+        return () => { active = false; };
     }, [token, backendUrl]);
 
     useEffect(() => {
@@ -202,13 +226,18 @@ const ShopContextProvider = ({ children }) => {
 
     const isInWishlist = (productId) => wishlist.includes(productId);
 
+    // One request per product at a time: a double click can't send two toggles that land out of order
+    const wishlistPending = useRef(new Set());
+
     const toggleWishlist = async (productId) => {
+        if (wishlistPending.current.has(productId)) return;
         const adding = !wishlist.includes(productId);
         const previous = wishlist;
         setWishlist((prev) => (adding ? [...prev, productId] : prev.filter((id) => id !== productId)));
         toast.success(adding ? 'Saved to your wishlist.' : 'Removed from your wishlist.', { toastId: 'wishlist' });
 
         if (!token) return;
+        wishlistPending.current.add(productId);
         try {
             const res = await axios.post(backendUrl + '/api/user/wishlist/toggle', { productId }, { headers: { token } });
             if (res.data.success) setWishlist(res.data.wishlist);
@@ -219,6 +248,8 @@ const ShopContextProvider = ({ children }) => {
         } catch (error) {
             setWishlist(previous);
             toast.error(friendlyError(error, 'We couldn’t update your wishlist. Please try again.'), { toastId: 'wishlist' });
+        } finally {
+            wishlistPending.current.delete(productId);
         }
     };
 
@@ -239,32 +270,32 @@ const ShopContextProvider = ({ children }) => {
         }
     };
 
+    // Resolves to true when the item is in the bag (and, when signed in, saved), false if it was refused
     const addToCart = async (itemId, size) => {
         if (!size) {
             toast.error('Please select a size to continue.', { toastId: 'select-size' });
-            return;
+            return false;
         }
 
-        // Server rejects quantities above 99 per size (orderController.buildOrderItems)
-        const inBag = cartItems[itemId]?.[size] || 0;
+        // Server rejects quantities above 99 per size (orderController.buildOrderItems).
+        // cartRef, not cartItems: it already counts clicks made before the last re-render.
+        const inBag = cartRef.current[itemId]?.[size] || 0;
         if (inBag >= 99) {
             toast.error('You can add up to 99 of each item.', { toastId: 'max-qty' });
-            return;
+            return false;
         }
         const product = products.find((p) => p._id === itemId);
         const left = unitsLeft(product, size);
         if (inBag >= left) {
             toast.error(left === 0 ? 'This size is sold out.' : `Only ${left} left in this size.`, { toastId: 'stock-limit' });
-            return;
+            return false;
         }
 
-        // functional update so quick repeated clicks are all counted
-        setCartItems((prev) => {
-            const copy = structuredClone(prev);
-            if (!copy[itemId]) copy[itemId] = {};
-            copy[itemId][size] = (copy[itemId][size] || 0) + 1;
-            return copy;
-        });
+        const next = structuredClone(cartRef.current);
+        if (!next[itemId]) next[itemId] = {};
+        next[itemId][size] = inBag + 1;
+        cartRef.current = next;
+        setCartItems(next);
         showAddedToast(itemId, size);
 
         if (token) {
@@ -277,25 +308,28 @@ const ShopContextProvider = ({ children }) => {
                 if (!res.data.success) {
                     undoAdd(itemId, size);
                     toast.error(friendlyError(res.data.message, 'We couldn’t add this item to your bag. Please try again.'));
+                    return false;
                 }
             } catch (error) {
                 console.log(error);
                 undoAdd(itemId, size);
                 toast.error(friendlyError(error, 'We couldn’t add this item to your bag. Please try again.'));
+                return false;
             }
         }
+        return true;
     };
 
     // Takes back an optimistic add the server refused, so the bag matches what is saved
     const undoAdd = (itemId, size) => {
-        setCartItems((prev) => {
-            const copy = structuredClone(prev);
-            if (!copy[itemId]?.[size]) return prev;
-            copy[itemId][size] -= 1;
-            if (copy[itemId][size] <= 0) delete copy[itemId][size];
-            if (Object.keys(copy[itemId]).length === 0) delete copy[itemId];
-            return copy;
-        });
+        const copy = structuredClone(cartRef.current);
+        if (!copy[itemId]?.[size]) return;
+        copy[itemId][size] -= 1;
+        if (copy[itemId][size] <= 0) delete copy[itemId][size];
+        if (Object.keys(copy[itemId]).length === 0) delete copy[itemId];
+        cartRef.current = copy;
+        setCartItems(copy);
+        toast.dismiss(ADDED_TOAST_ID);
     };
 
     const updateQuantity = async (itemId, size, qty) => {

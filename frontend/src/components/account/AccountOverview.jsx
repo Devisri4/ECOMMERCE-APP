@@ -16,19 +16,34 @@ const Stat = ({ label, value, to, hint }) => (
 )
 
 // First account tab: a summary built from the customer's orders, wishlist and saved addresses
-const AccountOverview = () => {
+const AccountOverview = ({ demo = false }) => {
   const { backendUrl, token, wishlist } = useContext(ShopContext)
   const [orders, setOrders] = useState(null)
+  const [failed, setFailed] = useState(false)
   const [addressCount, setAddressCount] = useState(null)
 
-  useEffect(() => {
+  const load = () => {
+    setFailed(false)
+    setOrders(null)
     axios.post(backendUrl + '/api/order/userorders', {}, { headers: { token } })
-      .then((res) => setOrders(res.data.success ? res.data.orders : []))
-      .catch(() => setOrders([]))
+      .then((res) => (res.data.success ? setOrders(res.data.orders) : setFailed(true)))
+      .catch(() => setFailed(true))
     axios.post(backendUrl + '/api/user/addresses', {}, { headers: { token } })
       .then((res) => setAddressCount(res.data.success ? res.data.addresses.length : 0))
       .catch(() => setAddressCount(0))
-  }, [backendUrl, token])
+  }
+
+  useEffect(load, [backendUrl, token])
+
+  // A failed load must not look like "no orders, ₹0 spent"
+  if (failed) {
+    return (
+      <div role='alert' className={`${panelClass} text-center`}>
+        <p className='text-sm text-neutral-600'>We couldn’t load your account summary.</p>
+        <button type='button' onClick={load} className='btn-secondary mt-6'>Try again</button>
+      </div>
+    )
+  }
 
   if (!orders) {
     return (
@@ -90,12 +105,16 @@ const AccountOverview = () => {
         <Link to='/account?tab=addresses' className={`${panelClass} transition-colors hover:border-ink`}>
           <p className='font-medium text-ink'>Saved addresses</p>
           <p className='mt-1 text-sm text-neutral-600'>
-            {addressCount ? `${addressCount} saved. Pick one at checkout to skip typing.` : 'Save an address to check out faster.'}
+            {demo
+              ? 'Not available on the shared demo account.'
+              : addressCount ? `${addressCount} saved. Pick one at checkout to skip typing.` : 'Save an address to check out faster.'}
           </p>
         </Link>
         <Link to='/account?tab=profile' className={`${panelClass} transition-colors hover:border-ink`}>
           <p className='font-medium text-ink'>Profile &amp; password</p>
-          <p className='mt-1 text-sm text-neutral-600'>Update your name or change your password.</p>
+          <p className='mt-1 text-sm text-neutral-600'>
+            {demo ? 'The demo account’s details are locked.' : 'Update your name or change your password.'}
+          </p>
         </Link>
       </div>
     </div>

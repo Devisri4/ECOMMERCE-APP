@@ -1,4 +1,5 @@
-import React, { useContext, useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import useDrawerFocus from '../hooks/useDrawerFocus';
 import { useSearchParams } from 'react-router-dom';
 import { ShopContext } from '../context/ShopContext';
 import { assets } from '../assets/assets';
@@ -44,6 +45,8 @@ const Collection = () => {
   const { products, productsLoading, search, showSearch } = useContext(ShopContext);
   const [searchParams, setSearchParams] = useSearchParams();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const drawerRef = useRef(null);
+  useDrawerFocus(drawerOpen, drawerRef);
 
   const category = readList(searchParams, 'category', CATEGORIES);
   const subCategory = readList(searchParams, 'type', TYPES);
@@ -206,6 +209,7 @@ const Collection = () => {
         />
         <div
           id='filter-drawer'
+          ref={drawerRef}
           role='dialog'
           aria-modal='true'
           aria-label='Filters'

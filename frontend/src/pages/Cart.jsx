@@ -29,6 +29,8 @@ const Cart = () => {
   }, [cartItems, products]);
 
   const loading = productsLoading || !cartLoaded;
+  // Checkout would be refused while a line asks for more than is left, so don't offer it yet
+  const overStock = cartData.some(({ product, size, quantity }) => quantity > unitsLeft(product, size));
   // Set by the backend when a customer cancels on the Stripe payment page
   const [searchParams] = useSearchParams();
   const paymentCancelled = searchParams.get('payment') === 'cancelled';
@@ -131,9 +133,12 @@ const Cart = () => {
           <aside className='lg:sticky lg:top-28 lg:self-start'>
             <div className='border border-neutral-200 bg-white px-6 py-6'>
               <CartTotal />
-              <button onClick={() => navigate('/place-order')} className='btn-primary mt-2 w-full py-4'>
+              <button onClick={() => navigate('/place-order')} disabled={overStock} className='btn-primary mt-2 w-full py-4'>
                 Proceed to checkout
               </button>
+              {overStock && (
+                <p className='mt-3 text-center text-xs text-red-700'>Update the highlighted items to continue.</p>
+              )}
               <p className='mt-4 text-center text-xs text-neutral-500'>Cash on delivery and card payments available</p>
             </div>
             <Link to='/collection' className='mt-4 block text-center text-xs uppercase tracking-[0.16em] text-neutral-600 hover:text-ink'>

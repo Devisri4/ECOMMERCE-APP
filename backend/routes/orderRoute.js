@@ -10,12 +10,13 @@ import {
 } from '../controllers/orderController.js'
 import authUser from '../middleware/auth.js'
 import adminAuth, { adminReadAuth } from '../middleware/adminAuth.js'
+import { orderLimiter } from '../middleware/rateLimit.js'
 
 const orderRouter = express.Router()
 
 // USER
-orderRouter.post('/place', authUser, placeOrder)
-orderRouter.post('/stripe', authUser, placeOrderStripe)
+orderRouter.post('/place', orderLimiter, authUser, placeOrder)
+orderRouter.post('/stripe', orderLimiter, authUser, placeOrderStripe)
 orderRouter.get('/verifyStripe', verifyStripe)
 orderRouter.post('/userorders', authUser, userOrders)
 orderRouter.post('/cancel', authUser, cancelOrder)

@@ -92,6 +92,7 @@ Templates are provided in each app's `.env.example`. Never commit real `.env` fi
 ## Known limitations
 
 - No password reset by email, and no admin moderation screen for reviews.
-- The shared demo shopper can't save addresses or change its profile, so visitors never see each other's details.
+- The shared demo shopper can't save addresses or change its profile, and its orders always use a sample address
+  and don't take real stock, so visitors never see each other's details.
 - Refunds aren't automated: paid card orders can't be cancelled in the app and are refunded via the Stripe dashboard.
 - Products and orders are loaded in full rather than paginated, which suits a catalogue of this size.

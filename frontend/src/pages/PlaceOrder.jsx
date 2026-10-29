@@ -17,6 +17,12 @@ const PAYMENT_METHODS = [
 
 const MAX_ADDRESSES = 5 // same limit as backend/controllers/accountController.js
 
+// Shown and sent for the shared demo shopper; the server stores its own copy (orderController.DEMO_ORDER_ADDRESS)
+const DEMO_ADDRESS = {
+  firstName: 'Demo', lastName: 'Shopper', email: 'demo@forever-store.example', street: '3rd Floor, Road No. 12, Banjara Hills',
+  city: 'Hyderabad', state: 'Telangana', zipcode: '500034', country: 'India', phone: '9000000000',
+}
+
 const PlaceOrder = () => {
 
   const [method, setMethod] = useState('cod')
@@ -35,6 +41,18 @@ const PlaceOrder = () => {
   const [formData, setFormData] = useState(EMPTY_ADDRESS)
   const [savedAddresses, setSavedAddresses] = useState([])
   const [saveAddress, setSaveAddress] = useState(false)
+  const [demo, setDemo] = useState(false) // shared demo shopper: the server stores a sample address instead
+
+  useEffect(() => {
+    if (!token) return
+    axios.post(backendUrl + '/api/user/profile', {}, { headers: { token } })
+      .then((res) => {
+        if (!res.data.success || !res.data.user.demo) return
+        setDemo(true)
+        setFormData(DEMO_ADDRESS)
+      })
+      .catch(() => {})
+  }, [token, backendUrl])
 
   // Checkout needs an account: send guests to the customer login, then back here.
   // The guest cart stays in localStorage and is merged into the account cart on login.
@@ -60,7 +78,7 @@ const PlaceOrder = () => {
   const [touched, setTouched] = useState({})   // fields the user has left; errors show after blur or submit
   const errors = validateAddress(formData)
   const matchesSaved = savedAddresses.some((a) => sameAddress(a, formData))
-  const canSave = !matchesSaved && savedAddresses.length < MAX_ADDRESSES
+  const canSave = !demo && !matchesSaved && savedAddresses.length < MAX_ADDRESSES
 
   const onFieldChange = (name, value) => setFormData(prev => ({ ...prev, [name]: value }))
   const onFieldBlur = (name) => setTouched(prev => ({ ...prev, [name]: true }))
@@ -191,6 +209,13 @@ const PlaceOrder = () => {
         <div className='mb-6 text-xl sm:text-2xl'>
           <Title text1={'DELIVERY'} text2={'INFORMATION'} />
         </div>
+
+        {demo && (
+          <p role='status' className='mb-8 border border-neutral-200 bg-white px-5 py-4 text-sm leading-relaxed text-neutral-700'>
+            You’re using the shared demo account, so this order uses a sample address. Your own details are never
+            stored here. Card payments run in Stripe test mode: use the card 4242 4242 4242 4242.
+          </p>
+        )}
 
         {/* Saved addresses: picking one fills the form below (still editable) */}
         {savedAddresses.length > 0 && (

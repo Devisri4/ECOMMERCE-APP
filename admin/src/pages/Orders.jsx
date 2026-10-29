@@ -120,15 +120,23 @@ const Orders = ({ token }) => {
                 disabled={updatingId === order._id}
                 className="w-full px-3 py-2.5 font-medium disabled:opacity-60"
               >
-                {STATUSES.map((s) => (
-                  // No refund workflow exists, so paid orders can't be marked Cancelled (enforced server-side too)
-                  <option key={s} value={s} disabled={s === 'Cancelled' && order.payment}>
-                    {s === 'Cancelled' && order.payment ? 'Cancelled (refund first)' : s}
-                  </option>
-                ))}
+                {STATUSES.map((s) => {
+                  // Same rules as the API: paid orders can't be cancelled (no refund workflow), and an unpaid
+                  // card order can only be cancelled until its payment is confirmed
+                  const awaitingCard = order.paymentMethod === 'Stripe' && !order.payment
+                  const disabled = s !== order.status && ((s === 'Cancelled' && order.payment) || (awaitingCard && s !== 'Cancelled'))
+                  return (
+                    <option key={s} value={s} disabled={disabled}>
+                      {s === 'Cancelled' && order.payment ? 'Cancelled (refund first)' : s}
+                    </option>
+                  )
+                })}
               </select>
               {order.paymentMethod === 'COD' && (
-                <p className="mt-2 text-xs text-zinc-500">COD is marked paid when the order is Delivered.</p>
+                <p className="mt-2 text-xs text-zinc-400">COD is marked paid when the order is Delivered.</p>
+              )}
+              {order.paymentMethod === 'Stripe' && !order.payment && order.status !== 'Cancelled' && (
+                <p className="mt-2 text-xs text-amber-300">Waiting for the card payment. It can only be cancelled until then.</p>
               )}
             </div>
           </article>

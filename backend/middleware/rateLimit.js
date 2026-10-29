@@ -41,6 +41,13 @@ export const newsletterLimiter = rateLimit({
     max: 10,
     message: "Too many sign-ups from this network. Please try again later.",
 });
+// Placing orders holds stock, so it is limited like sign-in
+export const orderLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 20,
+    message: "Too many orders from this network. Please try again later.",
+});
+
 export const reviewLimiter = rateLimit({
     windowMs: 60 * 60 * 1000,
     max: 20,

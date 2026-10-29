@@ -44,11 +44,13 @@ const refreshProductRating = async (productId) => {
     return summary;
 };
 
-// Orders store the product id as an ObjectId (or a string on very old orders)
+// Orders store the product id as an ObjectId (or a string on very old orders). A card order only counts
+// once it is paid, so an abandoned checkout doesn't earn the "Verified buyer" badge.
 const hasOrdered = (userId, productId) =>
     orderModel.exists({
         userId: String(userId),
         status: { $ne: "Cancelled" },
+        $or: [{ paymentMethod: "COD" }, { payment: true }],
         "items._id": { $in: [productId, new mongoose.Types.ObjectId(productId)] },
     });
 

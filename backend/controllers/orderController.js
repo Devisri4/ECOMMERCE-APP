@@ -5,6 +5,7 @@ import stripe from "../config/stripe.js";
 import { backendUrl as configuredBackendUrl, frontendUrl } from "../config/env.js";
 import { sendServerError } from "../utils/http.js";
 import { unitsLeft, stockMessage } from "../utils/stock.js";
+import { isDemoCustomer } from "./userController.js";
 
 // Store currency. Product prices and delivery are whole rupees; Stripe amounts are in paise (×100).
 // Orders placed before the INR switch have no `currency` and are treated as USD (see orderModel).
@@ -25,12 +26,32 @@ const publicBackendUrl = configuredBackendUrl;
 
 export class OrderValidationError extends Error {}
 
+// Limits that stop one account from holding the whole inventory
+export const MAX_ORDER_LINES = 20;
+export const MAX_ORDER_UNITS = 30;
+export const MAX_OPEN_CARD_ORDERS = 3;   // unpaid card checkouts per customer
+export const MAX_OPEN_COD_ORDERS = 10;   // cash-on-delivery orders not yet being packed
+
+// Orders from the shared demo shopper always use this fictional address, so one visitor's real details
+// are never stored where the next visitor would see them. Demo orders also don't take real stock.
+export const DEMO_ORDER_ADDRESS = Object.freeze({
+  firstName: "Demo", lastName: "Shopper", email: "demo@forever-store.example", street: "3rd Floor, Road No. 12, Banjara Hills",
+  city: "Hyderabad", state: "Telangana", zipcode: "500034", country: "India", phone: "9000000000",
+});
+
 // ----------------- SERVER-SIDE PRICING -----------------
 // The client sends which products/sizes/quantities it wants, but prices and the total are
 // always taken from the database — a tampered request can't change what the customer pays.
 const buildOrderItems = async (items) => {
   if (!Array.isArray(items) || items.length === 0) {
     throw new OrderValidationError("Your bag is empty");
+  }
+  if (items.length > MAX_ORDER_LINES) {
+    throw new OrderValidationError(`An order can have up to ${MAX_ORDER_LINES} different items`);
+  }
+  const units = items.reduce((sum, item) => sum + (Number(item?.quantity) || 0), 0);
+  if (units > MAX_ORDER_UNITS) {
+    throw new OrderValidationError(`An order can have up to ${MAX_ORDER_UNITS} pieces. Please place a second order for the rest.`);
   }
 
   const ids = [...new Set(items.map((item) => String(item?._id)))];
@@ -92,11 +113,12 @@ export const reserveStock = async (items) => {
   }
 };
 
-// Removes an unpaid card order (cancelled or abandoned checkout) and gives its units back, once:
+// Removes an abandoned card checkout (never paid, still "Order Placed") and gives its units back, once:
 // the conditional delete means only one of the redirect, the webhook or the list sync can win.
+// Orders the admin has moved on, or that were cancelled, are never deleted this way.
 const discardUnpaidOrder = async (orderId) => {
-  const removed = await orderModel.findOneAndDelete({ _id: orderId, payment: false });
-  if (removed && removed.status !== "Cancelled") await releaseStock(removed.items);
+  const removed = await orderModel.findOneAndDelete({ _id: orderId, payment: false, status: "Order Placed" });
+  if (removed) await releaseStock(removed.items);
   return Boolean(removed);
 };
 
@@ -142,58 +164,136 @@ const validationMessage = (err) => {
 };
 
 // ----------------- STRIPE HELPERS -----------------
-const expireSessionIfOpen = async (sessionId) => {
-  if (!stripe) return;
+const paymentIntentId = (session) =>
+  typeof session?.payment_intent === "string" ? session.payment_intent : session?.payment_intent?.id;
+
+// Refunds a payment that arrived for an order that had already been cancelled (its units were back on
+// sale). The idempotency key makes repeats (redirect + webhook) a single refund.
+const refundSession = async (session) => {
+  const intent = paymentIntentId(session);
+  if (!stripe || !intent) {
+    console.error("[stripe] Payment for a cancelled order needs a manual refund. Session:", session?.id);
+    return;
+  }
   try {
-    await stripe.checkout.sessions.expire(sessionId);
-  } catch {
-    // already expired or completed — nothing to do
+    await stripe.refunds.create({ payment_intent: intent }, { idempotencyKey: `refund-cancelled-${intent}` });
+    console.log("[stripe] Refunded payment for cancelled order", session.metadata?.orderId);
+  } catch (err) {
+    if (err?.code !== "charge_already_refunded") console.error("[stripe] Automatic refund failed:", err.message);
   }
 };
 
-// A confirmed card payment: mark the order paid and empty the customer's bag
-const markPaid = async (order) => {
-  order.payment = true;
-  await order.save();
-  await userModel.findByIdAndUpdate(order.userId, { cartData: {} });
+// A confirmed card payment. The order is marked paid only while it is still unpaid and not cancelled, in
+// one atomic update, so the redirect, the webhook and the list sync can't disagree or apply it twice.
+// If the order was cancelled first, the customer is refunded instead. Returns 'paid' | 'refunded'.
+export const settlePaidOrder = async (order, session) => {
+  const paid = await orderModel.findOneAndUpdate(
+    { _id: order._id, payment: false, status: { $ne: "Cancelled" } },
+    { payment: true },
+    { new: true }
+  );
+  if (paid) {
+    await userModel.findByIdAndUpdate(order.userId, { cartData: {} });
+    return "paid";
+  }
+  const current = await orderModel.findById(order._id).lean();
+  if (current?.payment) return "paid"; // recorded a moment ago by another path
+  await refundSession(session);
+  return "refunded";
+};
+
+// A delayed bank payment that failed leaves the session "complete" but unpaid
+const asyncPaymentFailed = async (session) => {
+  const intent = paymentIntentId(session);
+  if (!stripe || !intent || session.status !== "complete" || session.payment_status === "paid") return false;
+  const pi = await stripe.paymentIntents.retrieve(intent);
+  return ["canceled", "requires_payment_method"].includes(pi.status);
+};
+
+// Makes sure an unpaid order's checkout can no longer be paid before the order is cancelled or removed.
+// Returns 'closed' (expired, or no session) | 'paid' | 'processing' (finished, payment pending) | 'open'
+// (still payable, e.g. Stripe couldn't be reached — the caller must not cancel then).
+const closeCheckout = async (order) => {
+  if (!stripe || order.paymentMethod !== "Stripe" || !order.stripeSessionId) return { state: "closed" };
+  let session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
+  if (session.status === "open") {
+    try {
+      session = await stripe.checkout.sessions.expire(session.id);
+    } catch {
+      session = await stripe.checkout.sessions.retrieve(order.stripeSessionId); // it may have just completed
+    }
+  }
+  if (session.payment_status === "paid") return { state: "paid", session };
+  if (session.status === "complete") return { state: (await asyncPaymentFailed(session)) ? "closed" : "processing", session };
+  return { state: session.status === "expired" ? "closed" : "open", session };
 };
 
 // Brings an unpaid Stripe order in line with its Checkout Session.
-// Returns 'paid' | 'removed' | 'open' | 'processing' | 'skipped'.
+// Returns 'paid' | 'refunded' | 'removed' | 'open' | 'processing' | 'skipped'.
 const syncStripeOrder = async (order) => {
   if (!stripe || order.paymentMethod !== "Stripe" || order.payment || !order.stripeSessionId) return "skipped";
   const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId);
   if (session.metadata?.orderId !== String(order._id)) return "skipped";
 
-  if (session.payment_status === "paid") {
-    await markPaid(order);
-    return "paid";
-  }
-  if (session.status === "expired") {
-    // Abandoned checkout: nothing was charged, so remove the unpaid order (same as a cancelled checkout)
-    await discardUnpaidOrder(order._id);
-    return "removed";
+  if (session.payment_status === "paid") return settlePaidOrder(order, session);
+  if (session.status === "expired" || (await asyncPaymentFailed(session))) {
+    // Abandoned checkout or failed bank payment: nothing was charged, so remove the order and free its units
+    return (await discardUnpaidOrder(order._id)) ? "removed" : "skipped";
   }
   return session.status === "complete" ? "processing" : "open";
 };
 
 // Reconciles pending Stripe orders before they are listed, so lists never show stale "pending" orders.
 const syncPendingStripeOrders = async (orders) => {
-  const pending = orders.filter((o) => o.paymentMethod === "Stripe" && !o.payment && o.stripeSessionId).slice(0, 20);
+  const pending = orders
+    .filter((o) => o.paymentMethod === "Stripe" && !o.payment && o.stripeSessionId && o.status !== "Cancelled")
+    .slice(0, 20);
   if (pending.length === 0) return false;
   const results = await Promise.allSettled(pending.map(syncStripeOrder));
   results.forEach((r) => r.status === "rejected" && console.log("Stripe sync failed:", r.reason?.message));
   return results.some((r) => r.status === "fulfilled" && (r.value === "paid" || r.value === "removed"));
 };
 
+// Who is ordering, and what gets stored. The shared demo shopper's typed details are replaced by the
+// sample address and its orders don't hold stock; everyone else is checked against the open-order caps.
+const prepareOrder = async (userId, { items, address }, paymentMethod) => {
+  const user = await userModel.findById(userId).select("email");
+  if (!user) throw new OrderValidationError("Please sign in again to place your order");
+  const demo = isDemoCustomer(user);
+  const cleanAddress = demo ? { ...DEMO_ORDER_ADDRESS } : validateAddress(address);
+  const { orderItems, amount } = await buildOrderItems(items);
+
+  if (!demo) {
+    const open = paymentMethod === "Stripe"
+      ? { userId: String(userId), paymentMethod: "Stripe", payment: false, status: "Order Placed" }
+      : { userId: String(userId), paymentMethod: "COD", status: "Order Placed" };
+    let count = await orderModel.countDocuments(open);
+    if (paymentMethod === "Stripe" && count >= MAX_OPEN_CARD_ORDERS) {
+      // Abandoned checkouts may simply not have been cleaned up yet
+      await syncPendingStripeOrders(await orderModel.find(open));
+      count = await orderModel.countDocuments(open);
+    }
+    const max = paymentMethod === "Stripe" ? MAX_OPEN_CARD_ORDERS : MAX_OPEN_COD_ORDERS;
+    if (count >= max) {
+      throw new OrderValidationError(
+        paymentMethod === "Stripe"
+          ? "You have card payments that aren't finished yet. Complete or cancel them in My orders first."
+          : `You have ${count} orders waiting to be packed. Please wait for those before placing more.`
+      );
+    }
+  }
+  return { demo, cleanAddress, orderItems, amount };
+};
+
+const holdStock = (orderItems, demo) =>
+  demo ? orderItems.map((item) => ({ ...item, stockReserved: false })) : reserveStock(orderItems);
+
 // ----------------- COD ORDER -----------------
 const placeOrder = async (req, res) => {
   try {
     const userId = req.userId;
-    const { items, address } = req.body;
-    const cleanAddress = validateAddress(address);
-    const { orderItems, amount } = await buildOrderItems(items);
-    const reservedItems = await reserveStock(orderItems);
+    const { demo, cleanAddress, orderItems, amount } = await prepareOrder(userId, req.body, "COD");
+    const reservedItems = await holdStock(orderItems, demo);
 
     const newOrder = new orderModel({
       userId,
@@ -224,17 +324,14 @@ const placeOrder = async (req, res) => {
 const placeOrderStripe = async (req, res) => {
   try {
     const userId = req.userId;
-    const { items, address } = req.body;
-    const cleanAddress = validateAddress(address);
-    const { orderItems, amount } = await buildOrderItems(items);
-
     const backendUrl = publicBackendUrl();
     if (!stripe || !backendUrl || !frontendUrl()) {
       console.error("[config] Card payments disabled: STRIPE_SECRET_KEY, BACKEND_URL or FRONTEND_URL is not set");
       return res.json({ success: false, message: "Card payments are temporarily unavailable. Please choose cash on delivery." });
     }
 
-    const reservedItems = await reserveStock(orderItems);
+    const { demo, cleanAddress, orderItems, amount } = await prepareOrder(userId, req.body, "Stripe");
+    const reservedItems = await holdStock(orderItems, demo);
     const newOrder = new orderModel({
       userId,
       items: reservedItems,
@@ -288,8 +385,15 @@ const placeOrderStripe = async (req, res) => {
       throw stripeErr;
     }
 
-    newOrder.stripeSessionId = session.id;
-    await newOrder.save();
+    // One update, and undo everything if it fails: an order without its session id could never be
+    // matched to a payment or cleaned up, and would hold its stock forever
+    try {
+      await orderModel.updateOne({ _id: newOrder._id }, { stripeSessionId: session.id });
+    } catch (saveErr) {
+      await stripe.checkout.sessions.expire(session.id).catch(() => {});
+      await discardUnpaidOrder(newOrder._id);
+      throw saveErr;
+    }
 
     res.json({ success: true, session_url: session.url });
   } catch (err) {
@@ -298,44 +402,47 @@ const placeOrderStripe = async (req, res) => {
 };
 
 // ----------------- VERIFY STRIPE -----------------
-// Stripe redirects here after checkout. The query string is NOT trusted: the order is only marked
-// paid when Stripe reports its stored session as paid. A cancelled checkout expires the session
-// (so it can't be paid later from browser history) and removes the unpaid order.
+// Stripe redirects here after checkout. The link needs no sign-in, so it proves itself with the Checkout
+// Session id Stripe adds to it: only a request carrying this order's own session id can confirm or cancel
+// it (knowing an order id alone does nothing). The query string is NOT trusted for the outcome: the order
+// is only marked paid when Stripe reports the session as paid, and only removed once Stripe confirms the
+// checkout can no longer be paid.
 const verifyStripe = async (req, res) => {
   const frontend = frontendUrl();
   const cartUrl = frontend + "/cart";
   try {
     const { orderId, session_id } = req.query;
+    if (typeof orderId !== "string" || !/^[a-f0-9]{24}$/i.test(orderId)) return res.redirect(cartUrl);
     const order = await orderModel.findById(orderId);
     if (!order || order.paymentMethod !== "Stripe") return res.redirect(cartUrl);
+    if (typeof session_id !== "string" || !order.stripeSessionId || session_id !== order.stripeSessionId) {
+      return res.redirect(cartUrl);
+    }
 
     const successUrl = frontend + "/order-success?orderId=" + order._id;
     if (order.payment) return res.redirect(successUrl); // already confirmed (e.g. page refresh)
     if (!stripe) return res.redirect(cartUrl);
 
-    // Prefer the session stored on the order; a different session_id in the URL is rejected
-    const sessionId = order.stripeSessionId || session_id;
-    if (!sessionId || (order.stripeSessionId && session_id && session_id !== order.stripeSessionId)) {
-      return res.redirect(cartUrl);
-    }
-
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    const session = await stripe.checkout.sessions.retrieve(session_id);
     if (session.metadata?.orderId !== String(order._id)) return res.redirect(cartUrl);
 
     if (session.payment_status === "paid") {
-      await markPaid(order);
+      const result = await settlePaidOrder(order, session);
+      return res.redirect(result === "paid" ? successUrl : frontend + "/orders");
+    }
+
+    // Cancelled on the payment page or abandoned: close the checkout first, then remove the order
+    const { state } = await closeCheckout(order);
+    if (state === "paid") {
+      await settlePaidOrder(order, session);
       return res.redirect(successUrl);
     }
-
-    if (session.status === "complete") {
-      // Checkout finished but payment is still processing — keep the order pending
-      return res.redirect(frontend + "/orders");
+    if (state === "processing") return res.redirect(frontend + "/orders"); // payment still going through
+    if (state === "closed") {
+      await discardUnpaidOrder(order._id);
+      return res.redirect(cartUrl + "?payment=cancelled");
     }
-
-    // Cancelled (session still open) or abandoned (expired): nothing was charged
-    if (session.status === "open") await expireSessionIfOpen(session.id);
-    await discardUnpaidOrder(order._id);
-    return res.redirect(cartUrl + "?payment=cancelled");
+    return res.redirect(cartUrl); // Stripe couldn't close it right now; the list sync will retry
   } catch (err) {
     console.log(err);
     return res.redirect(cartUrl);
@@ -368,8 +475,10 @@ const stripeWebhook = async (req, res) => {
       const paid =
         (event.type === "checkout.session.completed" && session.payment_status === "paid") ||
         event.type === "checkout.session.async_payment_succeeded";
-      if (paid) await markPaid(order);
-      else if (event.type === "checkout.session.expired") await discardUnpaidOrder(order._id);
+      if (paid) await settlePaidOrder(order, session); // refunds instead if the order was cancelled first
+      else if (event.type === "checkout.session.expired" || event.type === "checkout.session.async_payment_failed") {
+        await discardUnpaidOrder(order._id);
+      }
     }
     res.json({ received: true });
   } catch (err) {
@@ -384,10 +493,34 @@ const userOrders = async (req, res) => {
     const query = () => orderModel.find({ userId: req.userId }).sort({ date: -1 });
     let orders = await query();
     if (await syncPendingStripeOrders(orders)) orders = await query();
+
+    // The demo shopper is shared: orders placed before demo orders used the sample address may still hold
+    // a visitor's real details, so they are never sent to the next visitor
+    const user = await userModel.findById(req.userId).select("email");
+    if (user && isDemoCustomer(user)) {
+      orders = orders.map((o) => {
+        const { stripeSessionId, ...order } = o.toObject(); // eslint-disable-line no-unused-vars
+        return { ...order, address: { ...DEMO_ORDER_ADDRESS } };
+      });
+    }
     res.json({ success: true, orders });
   } catch (err) {
     sendServerError(res, err);
   }
+};
+
+// An unpaid card order may only be cancelled once its checkout can no longer be paid. Returns an error
+// message for the caller to show, or null when it is safe to cancel.
+const checkoutBlocksCancel = async (order) => {
+  if (order.paymentMethod !== "Stripe" || order.payment || !order.stripeSessionId) return null;
+  const { state, session } = await closeCheckout(order);
+  if (state === "paid") {
+    await settlePaidOrder(order, session);
+    return "This order was just paid, so it can't be cancelled here.";
+  }
+  if (state === "processing") return "The card payment for this order is still being processed. Please try again later.";
+  if (state === "open") return "We couldn't reach the payment provider to stop this payment. Please try again.";
+  return null;
 };
 
 // ----------------- CANCEL (customer) -----------------
@@ -398,17 +531,17 @@ const CANCELLABLE_STATUSES = ["Order Placed", "Packing"];
 const cancelOrder = async (req, res) => {
   try {
     const { orderId } = req.body;
+    if (typeof orderId !== "string" || !/^[a-f0-9]{24}$/i.test(orderId)) return res.json({ success: false, message: "Order not found" });
     const order = await orderModel.findById(orderId);
 
     if (!order || order.userId !== String(req.userId)) {
       return res.json({ success: false, message: "Order not found" });
     }
 
-    // For card orders, check Stripe first: the payment may have completed in another tab
-    if (order.paymentMethod === "Stripe" && !order.payment && order.stripeSessionId) {
-      const state = await syncStripeOrder(order);
-      if (state === "removed") return res.json({ success: true, message: "Order cancelled" });
-      if (state === "open") await expireSessionIfOpen(order.stripeSessionId);
+    // For card orders, stop the payment page first: the payment may be completing in another tab
+    if (!order.payment && CANCELLABLE_STATUSES.includes(order.status)) {
+      const blocked = await checkoutBlocksCancel(order);
+      if (blocked) return res.json({ success: false, message: blocked });
     }
 
     if (order.payment) {
@@ -451,8 +584,9 @@ const allOrders = async (req, res) => {
     let orders = await query();
     if (await syncPendingStripeOrders(orders)) orders = await query();
     if (req.adminDemo) {
+      // The Stripe session id is what proves a payment-page return (see verifyStripe), so it is never shown
       orders = orders.map((o) => {
-        const { userId, ...order } = o.toObject(); // eslint-disable-line no-unused-vars
+        const { userId, stripeSessionId, ...order } = o.toObject(); // eslint-disable-line no-unused-vars
         return { ...order, address: maskAddress(order.address) };
       });
     }
@@ -469,8 +603,10 @@ const updateStatus = async (req, res) => {
       return res.json({ success: false, message: "Invalid order status" });
     }
 
+    if (typeof orderId !== "string" || !/^[a-f0-9]{24}$/i.test(orderId)) return res.json({ success: false, message: "Order not found" });
     const order = await orderModel.findById(orderId);
     if (!order) return res.json({ success: false, message: "Order not found" });
+    if (order.status === status) return res.json({ success: true, message: "Status Updated" });
 
     // There is no refund workflow, so a paid order can't simply be marked Cancelled
     if (status === "Cancelled" && order.payment) {
@@ -480,24 +616,40 @@ const updateStatus = async (req, res) => {
       });
     }
 
+    // A card order isn't fulfilled until it is paid: it can only be cancelled meanwhile
+    if (order.paymentMethod === "Stripe" && !order.payment && status !== "Cancelled") {
+      return res.json({ success: false, message: "Wait until the card payment is confirmed before changing this order." });
+    }
+
     const update = { status };
     // Cash on delivery is collected on delivery, so it counts as paid exactly when the order is Delivered
     if (order.paymentMethod === "COD") update.payment = status === "Delivered";
 
     const wasCancelled = order.status === "Cancelled";
     const nowCancelled = status === "Cancelled";
+    // Every change applies only if the order is still exactly as it was read here; otherwise someone
+    // (the customer cancelling, Stripe confirming a payment, another admin tab) changed it in between
+    const unchanged = { _id: order._id, status: order.status, payment: order.payment };
+    const CONFLICT = { success: false, message: "This order was changed a moment ago. Refresh the page and try again." };
 
     if (!wasCancelled && nowCancelled) {
-      // Into Cancelled: give the units back (only if this request is the one that cancelled it)
-      const previous = await orderModel.findOneAndUpdate({ _id: order._id, status: { $ne: "Cancelled" } }, update);
-      if (previous) await releaseStock(previous.items);
+      // Stop a pending card payment first, so a cancelled order can't be paid afterwards
+      const blocked = await checkoutBlocksCancel(order);
+      if (blocked) return res.json({ success: false, message: blocked });
+      const previous = await orderModel.findOneAndUpdate(unchanged, update);
+      if (!previous) return res.json(CONFLICT);
+      await releaseStock(previous.items); // only the request that cancelled it gives the units back
     } else if (wasCancelled && !nowCancelled) {
       // Re-opening a cancelled order takes its units again, which fails if they have been sold since
       const items = await reserveStock(order.items.map(({ stockReserved, ...item }) => item)); // eslint-disable-line no-unused-vars
-      const reopened = await orderModel.findOneAndUpdate({ _id: order._id, status: "Cancelled" }, { ...update, items });
-      if (!reopened) await releaseStock(items);
+      const reopened = await orderModel.findOneAndUpdate(unchanged, { ...update, items });
+      if (!reopened) {
+        await releaseStock(items);
+        return res.json(CONFLICT);
+      }
     } else {
-      await orderModel.updateOne({ _id: order._id }, update);
+      const moved = await orderModel.findOneAndUpdate(unchanged, update);
+      if (!moved) return res.json(CONFLICT);
     }
 
     res.json({ success: true, message: "Status Updated" });

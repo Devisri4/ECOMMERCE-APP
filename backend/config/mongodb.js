@@ -29,11 +29,14 @@ const connectDB = async () => {
   await pending;
 };
 
-// Mongoose doesn't retry a first connection that failed (e.g. the database briefly refused the server),
-// so on Vercel a warm instance would keep failing every request. This retries on the next API request
-// whenever there is no connection and none is in progress.
+// Every API request waits for the database before running:
+// - no connection (e.g. the first attempt failed, which Mongoose doesn't retry): start a new attempt;
+// - a connection still being set up (a fresh Vercel instance): wait for it, instead of letting the
+//   query give up after Mongoose's 10-second buffer while the connection is slow to open.
 export const ensureDB = async (req, res, next) => {
-  if (mongoose.connection.readyState === 0) await connectDB();
+  const state = mongoose.connection.readyState; // 0 disconnected, 1 connected, 2 connecting
+  if (state === 0) await connectDB();
+  else if (state === 2) await (pending ?? mongoose.connection.asPromise().catch(() => {}));
   next();
 };
 

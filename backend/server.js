@@ -2,7 +2,7 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import { checkConfig, allowedOrigins } from './config/env.js'
-import connectDB from './config/mongodb.js'
+import connectDB, { ensureDB } from './config/mongodb.js'
 import connectCloudinary from './config/cloudinary.js'
 import userRouter from './routes/userRoute.js'
 import productRouter from './routes/productRoute.js'
@@ -36,6 +36,8 @@ app.use((req, res, next) => {
   })
   next()
 })
+// Reconnect to MongoDB if an earlier attempt failed (see config/mongodb.js)
+app.use('/api', ensureDB)
 // Stripe webhook needs the unparsed body to check its signature, so it is registered before express.json()
 app.post('/api/order/stripe-webhook', express.raw({ type: 'application/json' }), stripeWebhook)
 app.use(express.json())

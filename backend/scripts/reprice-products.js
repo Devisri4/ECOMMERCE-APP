@@ -8,6 +8,8 @@
 // --apply requires the backup file produced by a preview run, and only updates products whose current
 // price still matches that backup — so it can't run twice or overwrite prices edited since then.
 // To undo, the backup lists every product's previous price.
+// Already applied on 2026-10-29 (catalogue now ₹699–₹2,499): do not apply it again, or prices drop another 3×.
+// The prices from before that run are the "inr" values in scripts/backups/prices-usd-2026-10-27.json.
 import "dotenv/config";
 import fs from "fs";
 import path from "path";
@@ -33,8 +35,10 @@ const main = async () => {
     const rows = products.map((p) => ({ _id: String(p._id), name: p.name, before: p.price, after: repriced(p.price) }));
     const dir = path.join("scripts", "backups");
     fs.mkdirSync(dir, { recursive: true });
-    const file = path.join(dir, `prices-before-reprice-${new Date().toISOString().slice(0, 10)}.json`);
-    fs.writeFileSync(file, JSON.stringify(rows, null, 2));
+    // Timestamped and written with "wx" (fail if it exists), so a second preview never replaces an earlier backup
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    const file = path.join(dir, `prices-before-reprice-${stamp}.json`);
+    fs.writeFileSync(file, JSON.stringify(rows, null, 2), { flag: "wx" });
     console.table(rows.map(({ name, before, after }) => ({ name, before, after })));
     console.log(`Preview only — nothing written to MongoDB. Backup: ${file}`);
     console.log(`To apply: node scripts/reprice-products.js --apply --backup ${file}`);

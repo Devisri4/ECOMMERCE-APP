@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import useDrawerFocus from '../hooks/useDrawerFocus';
+import AccountMenu from './AccountMenu';
 import { assets } from "../assets/assets";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { ShopContext } from '../context/ShopContext';
@@ -96,14 +97,8 @@ const Navbar = () => {
               <img src={assets.search_icon} className="w-[18px]" alt="" />
             </button>
 
-            {/* Account: signed-in shoppers go to their account page, guests to sign in */}
-            <Link
-              to={token ? '/account' : '/login?redirect=/account'}
-              className={iconButton}
-              aria-label={token ? 'My account' : 'Sign in'}
-            >
-              <img className="w-[18px]" src={assets.profile_icon} alt="" />
-            </Link>
+            {/* Account: initials badge with a menu when signed in, sign-in link otherwise */}
+            <AccountMenu iconButton={iconButton} />
 
             {/* Wishlist: guests sign in first; items they saved are kept and merged into the account */}
             <Link

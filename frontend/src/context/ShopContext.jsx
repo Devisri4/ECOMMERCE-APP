@@ -193,6 +193,22 @@ const ShopContextProvider = ({ children }) => {
         }
     }, [cartItems, token]);
 
+    /* ---------------- SIGNED-IN SHOPPER ---------------- */
+    // Name (and email) for the header's initials badge. Cleared on sign-out; the account page calls
+    // setUser after the name is edited so the badge updates straight away.
+    const [user, setUser] = useState(null);
+    useEffect(() => {
+        if (!token) {
+            setUser(null);
+            return;
+        }
+        let active = true;
+        axios.post(backendUrl + '/api/user/profile', {}, { headers: { token } })
+            .then((res) => { if (active && res.data.success) setUser(res.data.user); })
+            .catch(() => {});
+        return () => { active = false; };
+    }, [token, backendUrl]);
+
     /* ---------------- WISHLIST ---------------- */
     // Signed in: load the account wishlist and add anything saved as a guest. Signed out: the browser copy.
     useEffect(() => {
@@ -416,6 +432,8 @@ const ShopContextProvider = ({ children }) => {
     getCartCount,
     getCartAmount,
     cartLoaded,
+    user,
+    setUser,
     wishlist,
     isInWishlist,
     toggleWishlist,

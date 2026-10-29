@@ -41,7 +41,7 @@ const panelClass = 'border border-neutral-200 bg-white px-5 py-6 sm:px-8 sm:py-8
 
 /* ---------------- Profile details (name editable, email read-only) ---------------- */
 const ProfileDetails = ({ profile, onSaved }) => {
-  const { backendUrl, token } = useContext(ShopContext)
+  const { backendUrl, token, setUser } = useContext(ShopContext)
   const [name, setName] = useState(profile.name)
   const [saving, setSaving] = useState(false)
 
@@ -57,6 +57,7 @@ const ProfileDetails = ({ profile, onSaved }) => {
       const res = await axios.post(backendUrl + '/api/user/profile/update', { name: trimmed }, { headers: { token } })
       if (res.data.success) {
         onSaved(res.data.user)
+        setUser((current) => ({ ...current, ...res.data.user })) // header initials update straight away
         toast.success('Your profile has been updated.')
       } else {
         toast.error(friendlyError(res.data.message, 'We couldn’t update your profile. Please try again.'))

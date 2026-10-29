@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import process from 'node:process'
 
 // Link-preview tags in index.html need the site's absolute URL (%VITE_SITE_URL%). On Vercel it defaults to the
 // project's production domain, so no extra setting is needed; an explicit VITE_SITE_URL still wins.

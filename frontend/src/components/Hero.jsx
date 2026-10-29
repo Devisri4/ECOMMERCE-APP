@@ -1,4 +1,5 @@
 import React from 'react'
+import { seasonYear } from '../utils/season';
 import { Link } from 'react-router-dom';
 import { assets } from "../assets/assets";
 import useParallax from '../hooks/useParallax';
@@ -9,7 +10,7 @@ const Hero = () => {
     const archRef = useParallax(0.04);
     const outlineRef = useParallax(-0.06);
 
-    const year = new Date().getFullYear();
+    const year = seasonYear();
 
     return (
         <section aria-labelledby='hero-heading' className='relative pt-6 sm:pt-10'>

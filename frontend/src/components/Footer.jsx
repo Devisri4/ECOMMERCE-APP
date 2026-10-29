@@ -1,4 +1,5 @@
 import React from 'react'
+import { seasonYear } from '../utils/season'
 import { Link } from 'react-router-dom'
 import { assets } from '../assets/assets'
 import { STORE_INFO, EMAIL_USER, EMAIL_DOMAIN } from '../utils/storeInfo'
@@ -42,7 +43,7 @@ const Footer = () => {
         </div>
         <div className='border-t border-neutral-200'>
             <div className='page-container flex flex-col gap-2 py-6 text-xs text-neutral-500 sm:flex-row sm:justify-between'>
-                <p>© {new Date().getFullYear()} FOREVER. A portfolio demo store: no real orders are shipped or charged.</p>
+                <p>© {seasonYear()} FOREVER. A portfolio demo store: no real orders are shipped or charged.</p>
                 <a href={STORE_INFO.sourceUrl} target='_blank' rel='noreferrer' className='transition-colors hover:text-ink'>
                     View the source on GitHub
                 </a>

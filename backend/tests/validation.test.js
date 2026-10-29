@@ -103,3 +103,22 @@ test("sample orders are realistic, rupee-priced, consistent and never hold stock
     if (o.paymentMethod === "COD") assert.equal(o.payment, o.status === "Delivered");
   }
 });
+
+test("product rename gives every product a unique name that matches its category and garment", async () => {
+  const { planRenames } = await import("../scripts/rename-products.js");
+  const products = [
+    ...Array.from({ length: 9 }, (_, i) => ({ _id: `m${i}`, name: "Men Round Neck Pure Cotton T-shirt", category: i < 7 ? "Men" : "Kids", date: i })),
+    { _id: "g1", name: "Girls Round Neck Cotton Top", category: "Women", date: 20 },
+    { _id: "g2", name: "Girls Round Neck Cotton Top", category: "Kids", date: 21 },
+    { _id: "j1", name: "Men Slim Fit Relaxed Denim Jacket", category: "Men", date: 22 },
+  ];
+  const plan = planRenames(products);
+  const names = plan.map((r) => r.after);
+  assert.equal(new Set(names).size, names.length, "all unique");
+  const byId = Object.fromEntries(plan.map((r) => [r._id, r.after]));
+  assert.match(byId.m0, /^Men Classic Cotton T-shirt$/);
+  assert.match(byId.m8, /^Kids \w+ Cotton T-shirt$/, "category Kids gets a Kids name");
+  assert.match(byId.g1, /^Women \w+ Cotton Top$/);
+  assert.match(byId.g2, /^Girls \w+ Cotton Top$/);
+  assert.match(byId.j1, /Denim Jacket$/);
+});

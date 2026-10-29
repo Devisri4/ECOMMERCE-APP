@@ -84,7 +84,7 @@ const Dashboard = ({ token }) => {
           : [0, 1, 2, 3, 4].map((i) => <div key={i} aria-hidden='true' className='h-32 animate-pulse rounded-xl border border-zinc-800 bg-zinc-800/40' />)}
       </div>
 
-      {data && <SalesCharts orders={orders} />}
+      {data && <SalesCharts orders={orders} products={data.products} />}
 
       <section className='mt-10 rounded-xl border border-zinc-800 bg-[#202024]'>
         <div className='flex items-center justify-between border-b border-zinc-800 px-5 py-4'>

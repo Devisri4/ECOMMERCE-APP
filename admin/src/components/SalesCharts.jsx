@@ -207,10 +207,12 @@ const TopProducts = ({ rows }) => {
 
 // Charts for the dashboard, computed from the admin order list. Only INR orders are counted (earlier
 // USD orders aren't mixed in), and cancelled orders are left out.
-const SalesCharts = ({ orders }) => {
+const SalesCharts = ({ orders, products = [] }) => {
   const [days, setDays] = useState(30)
 
   const { daily, top, total, count } = useMemo(() => {
+    // Orders keep the name at the time of purchase; show the product's current name when it still exists
+    const currentName = new Map(products.map((p) => [String(p._id), p.name]))
     const since = rangeStart(days)
     // Card orders still waiting for payment may never be paid, so they are not counted as sales yet
     const inRange = orders.filter((o) => o.status !== 'Cancelled' && !(o.paymentMethod === 'Stripe' && !o.payment) && (o.currency || 'USD') === 'INR' && o.date >= since)
@@ -218,7 +220,7 @@ const SalesCharts = ({ orders }) => {
     for (const o of inRange) {
       for (const item of o.items) {
         const id = String(item._id)
-        const row = byProduct.get(id) || { id, name: item.name, units: 0, revenue: 0 }
+        const row = byProduct.get(id) || { id, name: currentName.get(id) || item.name, units: 0, revenue: 0 }
         row.units += item.quantity
         row.revenue += item.price * item.quantity
         byProduct.set(id, row)
@@ -230,7 +232,7 @@ const SalesCharts = ({ orders }) => {
       total: inRange.reduce((sum, o) => sum + o.amount, 0),
       count: inRange.length,
     }
-  }, [orders, days])
+  }, [orders, products, days])
 
   return (
     <section className='mt-10' aria-labelledby='sales-heading'>

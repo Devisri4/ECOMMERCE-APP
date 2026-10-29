@@ -9,12 +9,15 @@ storefront, a separate admin panel, and a REST API with Stripe payments and Clou
 
 ## Try it
 
-<!-- Add the deployed URLs here once they are live:
-- **Storefront:** https://<storefront>.vercel.app
-- **Admin panel:** https://<admin>.vercel.app
--->
+- **Storefront:** https://ecommerce-frontend-beta-lime.vercel.app
+- **Admin panel:** https://ecommerce-admin-indol-rho.vercel.app
 
-Both sign-in screens have a **Use demo account** button when demo accounts are configured:
+| Account | Email | Password |
+|---|---|---|
+| Demo shopper | `demo@forever-store.example` | `DemoShop2026` |
+| Read-only demo admin | `demo-admin@forever-store.example` | `DemoAdmin2026` |
+
+Both sign-in screens also have a **Use demo account** button that fills these in:
 
 - **Demo shopper:** browse, fill the bag and check out with cash on delivery, or pay by card with Stripe's test
   card `4242 4242 4242 4242` (any future date, any CVC). The shared account's name and password can't be changed.

@@ -112,7 +112,8 @@ const ShopContextProvider = ({ children }) => {
                         const qty = guestCart[itemId][size];
                         if (qty > 0) {
                             if (!merged[itemId]) merged[itemId] = {};
-                            merged[itemId][size] = (merged[itemId][size] || 0) + qty;
+                            // Same 99-per-size cap as the server (cartController / checkout)
+                            merged[itemId][size] = Math.min((merged[itemId][size] || 0) + qty, 99);
                             updates.push({ itemId, size, quantity: merged[itemId][size] });
                         }
                     }

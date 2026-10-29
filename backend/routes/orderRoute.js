@@ -9,7 +9,7 @@ import {
   updateStatus
 } from '../controllers/orderController.js'
 import authUser from '../middleware/auth.js'
-import adminAuth from '../middleware/adminAuth.js'
+import adminAuth, { adminReadAuth } from '../middleware/adminAuth.js'
 
 const orderRouter = express.Router()
 
@@ -20,8 +20,8 @@ orderRouter.get('/verifyStripe', verifyStripe)
 orderRouter.post('/userorders', authUser, userOrders)
 orderRouter.post('/cancel', authUser, cancelOrder)
 
-// ADMIN
-orderRouter.post('/list', adminAuth, allOrders)
+// ADMIN (the read-only demo admin can list orders, with customer details masked)
+orderRouter.post('/list', adminReadAuth, allOrders)
 orderRouter.post('/status', adminAuth, updateStatus)
 
 export default orderRouter

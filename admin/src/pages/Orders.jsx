@@ -28,7 +28,7 @@ const Orders = ({ token }) => {
       )
 
       if (response.data.success) {
-        setOrders(response.data.orders.reverse())
+        setOrders(response.data.orders) // the API returns newest first
       }
     } catch (error) {
       toast.error(friendlyError(error, 'Couldn’t load orders. Please try again.'))

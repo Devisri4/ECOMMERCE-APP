@@ -30,11 +30,10 @@ const suggestEmail = (value) => {
 
 // Backend messages (unchanged API) → friendlier copy and an optional next step
 const describeAuthError = (message, isLogin) => {
-  if (message === "User doesn't exist") return { text: 'No account found with this email.', action: 'signup' };
+  // The API gives one message for an unknown email and a wrong password, so accounts can't be probed
   if (message === 'Invalid credentials') return { text: 'Incorrect email or password. Please try again.' };
   if (message === 'User already exists') return { text: 'An account with this email already exists.', action: 'login' };
   if (message === 'Please enter a valid email') return { text: 'Please enter a valid email address.' };
-  if (message === 'Please enter a strong password') return { text: 'Please choose a password of at least 8 characters.' };
   return { text: message || (isLogin ? 'Could not sign you in. Please try again.' : 'Could not create your account. Please try again.') };
 };
 
@@ -44,6 +43,11 @@ const inputClass = (hasError) =>
   `${inputBase} ${hasError ? 'border-red-700 focus:border-red-700' : 'border-neutral-300 focus:border-ink'}`;
 const labelClass = 'mb-2 block text-xs font-medium uppercase tracking-[0.14em] text-neutral-600';
 const fieldErrorClass = 'mt-2 text-xs text-red-700';
+
+// Shared demo shopper for portfolio visitors; the backend blocks changing its name or password
+const DEMO_ACCOUNT = import.meta.env.VITE_DEMO_EMAIL && import.meta.env.VITE_DEMO_PASSWORD
+  ? { email: import.meta.env.VITE_DEMO_EMAIL, password: import.meta.env.VITE_DEMO_PASSWORD }
+  : null;
 
 const Login = () => {
   const [currentState, setCurrentState] = useState('Login');
@@ -164,11 +168,6 @@ const Login = () => {
           {formError && (
             <div role='alert' className='border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800'>
               <p>{formError.text}</p>
-              {formError.action === 'signup' && (
-                <button type='button' onClick={() => switchMode('Sign Up')} className='mt-2 font-medium text-ink underline underline-offset-4 hover:opacity-70'>
-                  Create an account with this email
-                </button>
-              )}
               {formError.action === 'login' && (
                 <button type='button' onClick={() => switchMode('Login')} className='mt-2 font-medium text-ink underline underline-offset-4 hover:opacity-70'>
                   Sign in instead
@@ -259,6 +258,17 @@ const Login = () => {
               ? (isLogin ? 'Signing in…' : 'Creating account…')
               : (isLogin ? 'Sign In' : 'Sign Up')}
           </button>
+
+          {/* Portfolio visitors: fills in the shared demo shopper (only when VITE_DEMO_EMAIL/PASSWORD are set) */}
+          {isLogin && DEMO_ACCOUNT && (
+            <button
+              type='button'
+              onClick={() => { setEmail(DEMO_ACCOUNT.email); setPassword(DEMO_ACCOUNT.password); setFormError(null); }}
+              className='btn-secondary w-full'
+            >
+              Use demo account
+            </button>
+          )}
         </form>
 
         <p className='mt-8 text-center text-sm text-neutral-600'>

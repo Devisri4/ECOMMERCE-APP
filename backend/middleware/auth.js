@@ -10,12 +10,12 @@ const authUser = async (req, res, next) => {
     try {
         const token_decode = jwt.verify(token, process.env.JWT_SECRET);
 
-        // Customer tokens carry { id }; anything else (e.g. an admin token) is not a customer session
-        if (!token_decode || typeof token_decode !== 'object' || !token_decode.id) {
+        // Customer tokens carry { id }; anything else (e.g. an admin token) is not a customer session.
+        // Tokens without an expiry (issued before sessions expired) are rejected too.
+        if (!token_decode || typeof token_decode !== 'object' || !token_decode.id || !token_decode.exp) {
             return res.json({ success: false, message: 'Not Authorized Login Again' });
         }
 
-        // ✅ FIX (THIS IS THE KEY LINE)
         req.userId = token_decode.id;
 
         next();

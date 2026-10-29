@@ -17,7 +17,7 @@ const REQUIRED = [
   "FRONTEND_URL",
 ];
 // Optional: the related feature is switched off when missing
-const OPTIONAL = ["STRIPE_SECRET_KEY", "BACKEND_URL", "ADMIN_URL"];
+const OPTIONAL = ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "BACKEND_URL", "ADMIN_URL", "DEMO_ADMIN_EMAIL", "DEMO_ADMIN_PASSWORD"];
 
 export const checkConfig = () => {
   const missing = REQUIRED.filter((name) => !process.env[name]);

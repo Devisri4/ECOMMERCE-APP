@@ -1,6 +1,7 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { assets } from '../assets/assets'
+import { STORE_INFO, EMAIL_USER, EMAIL_DOMAIN } from '../utils/storeInfo'
 
 const linkClass = 'text-neutral-600 transition-colors hover:text-ink'
 
@@ -20,7 +21,8 @@ const Footer = () => {
                     <img src={assets.logo} className='w-28' alt='FOREVER' />
                 </Link>
                 <p className='mt-5 max-w-sm text-sm leading-relaxed text-neutral-600'>
-                    Welcome to FOREVER, your one-stop destination for quality products at the best prices. We bring you the latest trends, exclusive collections, and reliable service — all designed to make your shopping experience simple, secure, and enjoyable. </p>
+                    Modern essentials for men, women and kids: considered fabrics, easy fits and a {STORE_INFO.returnDays}-day return window on every order.
+                </p>
             </div>
             <FooterColumn title='Shop'>
                 <li><Link to='/collection' className={linkClass}>All collections</Link></li>
@@ -33,14 +35,18 @@ const Footer = () => {
                 <li><Link to='/contact' className={linkClass}>Contact</Link></li>
             </FooterColumn>
             <FooterColumn title='Get in touch'>
-                <li><a href='tel:+12124567865' className={linkClass}>+1-212-456-7865</a></li>
-                <li><a href='mailto:contact@forevershoping.com' className={`${linkClass} break-all`}>contact@forevershoping.com</a></li>
+                <li><a href={`mailto:${STORE_INFO.email}`} className={linkClass}>{EMAIL_USER}@<wbr />{EMAIL_DOMAIN}</a></li>
+                <li className='text-neutral-600'>{STORE_INFO.hours}</li>
+                <li className='text-neutral-600'>{STORE_INFO.city}</li>
             </FooterColumn>
         </div>
         <div className='border-t border-neutral-200'>
-            <p className='page-container py-6 text-xs text-neutral-500'>
-                © {new Date().getFullYear()} FOREVER. All rights reserved.
-            </p>
+            <div className='page-container flex flex-col gap-2 py-6 text-xs text-neutral-500 sm:flex-row sm:justify-between'>
+                <p>© {new Date().getFullYear()} FOREVER. A portfolio demo store: no real orders are shipped or charged.</p>
+                <a href={STORE_INFO.sourceUrl} target='_blank' rel='noreferrer' className='transition-colors hover:text-ink'>
+                    View the source on GitHub
+                </a>
+            </div>
         </div>
     </footer>
     )

@@ -4,6 +4,7 @@ import { ShopContext } from '../context/ShopContext';
 import RelatedProducts from '../components/RelatedProducts';
 import { optimizeImage } from '../utils/image';
 import { formatPrice } from '../utils/currency';
+import usePageTitle from '../hooks/usePageTitle';
 
 // Store policies already stated across the site (footer/policy strip) — no invented claims.
 const DELIVERY_NOTES = [
@@ -25,6 +26,7 @@ const Product = () => {
   const [zoom, setZoom] = useState({ active: false, x: 50, y: 50 });
 
   const productData = products.find((item) => item._id === productId);
+  usePageTitle(productData?.name || (productsLoading ? 'Product' : 'Product not found'));
 
   // Reset gallery and size when navigating between products (e.g. from related items)
   useEffect(() => {

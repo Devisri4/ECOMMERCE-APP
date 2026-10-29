@@ -1,7 +1,7 @@
 import React from 'react'
 
 // Text wordmark (the logo image is dark-on-transparent and disappears on the charcoal theme)
-const Navbar = ({setToken}) => {
+const Navbar = ({setToken, demo = false}) => {
   return (
     <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-zinc-800 bg-[#18181b]/95 px-4 backdrop-blur sm:px-8">
       <div className="flex items-center gap-3">
@@ -11,6 +11,11 @@ const Navbar = ({setToken}) => {
         <span className="rounded-full border border-violet-500/40 bg-violet-500/10 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.25em] text-violet-300">
           Admin
         </span>
+        {demo && (
+          <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.25em] text-amber-300">
+            Demo · read-only
+          </span>
+        )}
       </div>
       <button
         type="button"

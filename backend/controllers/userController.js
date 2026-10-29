@@ -5,32 +5,44 @@ import crypto from "crypto";
 import userModel from "../models/userModel.js";
 import { sendServerError } from "../utils/http.js";
 
-// Customer sessions expire after 7 days (older tokens issued without an expiry keep working until logout)
+// Customer sessions expire after 7 days (tokens without an expiry are rejected by middleware/auth.js)
 const createToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' })
 }
 
+// Same rules as the sign-up checklist (frontend/src/utils/passwordRules.js) and change-password
+const PASSWORD_RULES_MESSAGE = "Password must be at least 8 characters with an uppercase letter, a lowercase letter and a number"
+export const isStrongPassword = (p) =>
+    typeof p === 'string' && p.length >= 8 && /[A-Z]/.test(p) && /[a-z]/.test(p) && /\d/.test(p)
+
+// Emails are stored lowercase. Lookups ignore case so accounts created before that still match.
+const normalizeEmail = (email) => email.trim().toLowerCase()
+const findByEmail = (email) => userModel.findOne({ email }).collation({ locale: 'en', strength: 2 })
+
+const INVALID_LOGIN = 'Invalid credentials'
+
+// Compared against when the email is unknown, so a missing account takes as long as a wrong password
+let dummyHash
+const getDummyHash = async () => (dummyHash ??= await bcrypt.hash('not-a-real-password', 10))
+
 // Route for user login
+// Unknown email and wrong password get the same message, so the form can't be used to find accounts.
+// Both fields must be strings: an object like { "$regex": "^a" } would otherwise reach the database query.
 const loginUser = async (req, res) => {
     try {
-        // ERROR FIX: Destructuring was broken
         const { email, password } = req.body;
-        
-        const user = await userModel.findOne({ email });
-        
-        if (!user) {
-            return res.json({ success: false, message: "User doesn't exist" })
+        if (typeof email !== 'string' || typeof password !== 'string' || !email.trim() || !password) {
+            return res.json({ success: false, message: INVALID_LOGIN })
         }
-        
-        const isMatch = await bcrypt.compare(password, user.password);
 
-        if (isMatch) {
+        const user = await findByEmail(normalizeEmail(email));
+        const isMatch = await bcrypt.compare(password, user ? user.password : await getDummyHash());
+
+        if (user && isMatch) {
             const token = createToken(user._id);
             return res.json({ success: true, token });
-        } else {
-            // ERROR FIX: This should *only* send error if isMatch is false
-            return res.json({ success: false, message: 'Invalid credentials' });
         }
+        return res.json({ success: false, message: INVALID_LOGIN });
     } catch (error) {
         sendServerError(res, error);
     }
@@ -40,19 +52,24 @@ const loginUser = async (req, res) => {
 const registerUser = async (req, res) => {
     try {
         const { name, email, password } = req.body;
-        
-        // checking user already exists or not
-        const exists = await userModel.findOne({ email });
-        if (exists) {
-            return res.json({ success: false, message: "User already exists" })
+
+        // validating name, email format & strong password before touching the database
+        const cleanName = typeof name === 'string' ? name.trim() : ''
+        if (!cleanName || cleanName.length > 60) {
+            return res.json({ success: false, message: "Please enter a name between 1 and 60 characters" })
         }
-        
-        // validating email format & strong password
-        if (!validator.isEmail(email)) {
+        if (typeof email !== 'string' || !validator.isEmail(email.trim())) {
             return res.json({ success: false, message: "Please enter a valid email" })
         }
-        if (password.length < 8) {
-            return res.json({ success: false, message: "Please enter a strong password" })
+        if (!isStrongPassword(password)) {
+            return res.json({ success: false, message: PASSWORD_RULES_MESSAGE })
+        }
+        const cleanEmail = normalizeEmail(email)
+
+        // checking user already exists or not
+        const exists = await findByEmail(cleanEmail);
+        if (exists) {
+            return res.json({ success: false, message: "User already exists" })
         }
 
         // hashing user password
@@ -60,8 +77,8 @@ const registerUser = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, salt);
 
         const newUser = new userModel({
-            name,
-            email,
+            name: cleanName,
+            email: cleanEmail,
             password: hashedPassword
         });
 
@@ -71,6 +88,8 @@ const registerUser = async (req, res) => {
         res.json({ success: true, token });
 
     } catch (error) {
+        // Two sign-ups with the same email at once: the unique index rejects the second
+        if (error?.code === 11000) return res.json({ success: false, message: "User already exists" })
         sendServerError(res, error);
     }
 }
@@ -103,10 +122,18 @@ const adminLogin = async (req, res) => {
         if (emailOk && passwordOk) {
             // The token carries a role claim only — never the admin password (JWT payloads are readable)
             const token = jwt.sign({ role: 'admin', email }, JWT_SECRET, { expiresIn: '1d' });
-            res.json({success: true, token})
-        } else {
-            res.json({ success: false, message: "Invalid credentials"})
+            return res.json({success: true, token})
         }
+
+        // Optional read-only demo admin for portfolio visitors: only set when both variables are configured.
+        // Its token has its own role, which middleware/adminAuth.js allows on read-only routes only.
+        const { DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASSWORD } = process.env
+        if (DEMO_ADMIN_EMAIL && DEMO_ADMIN_PASSWORD && safeEqual(email, DEMO_ADMIN_EMAIL) && safeEqual(password, DEMO_ADMIN_PASSWORD)) {
+            const token = jwt.sign({ role: 'demo-admin', email }, JWT_SECRET, { expiresIn: '2h' });
+            return res.json({ success: true, token, demo: true })
+        }
+
+        res.json({ success: false, message: "Invalid credentials"})
     } catch (error) {
         sendServerError(res, error, "Couldn't sign you in. Please try again.");
     }
@@ -116,6 +143,12 @@ const adminLogin = async (req, res) => {
 // All three use req.userId from the verified token, so a customer can only reach their own record.
 
 const NOT_AUTHORIZED = "Not Authorized Login Again"
+
+// The shared demo shopper account (DEMO_CUSTOMER_EMAIL) can't be renamed or have its password
+// changed, so one visitor can't lock the next one out.
+const DEMO_ACCOUNT_LOCKED = "The demo account can't be changed. Create your own account to try this."
+const isDemoCustomer = (user) =>
+    Boolean(process.env.DEMO_CUSTOMER_EMAIL) && user.email.toLowerCase() === normalizeEmail(process.env.DEMO_CUSTOMER_EMAIL)
 
 // Route for reading the signed-in customer's profile (never returns password or cart)
 const getProfile = async (req, res) => {
@@ -135,6 +168,10 @@ const updateProfile = async (req, res) => {
         if (!name || name.length > 60) {
             return res.json({ success: false, message: "Please enter a name between 1 and 60 characters" })
         }
+        const current = await userModel.findById(req.userId).select('email')
+        if (!current) return res.json({ success: false, message: NOT_AUTHORIZED })
+        if (isDemoCustomer(current)) return res.json({ success: false, message: DEMO_ACCOUNT_LOCKED })
+
         const user = await userModel.findByIdAndUpdate(req.userId, { name }, { new: true }).select('name email')
         if (!user) return res.json({ success: false, message: NOT_AUTHORIZED })
         res.json({ success: true, user: { name: user.name, email: user.email } })
@@ -153,12 +190,13 @@ const changePassword = async (req, res) => {
 
         const user = await userModel.findById(req.userId)
         if (!user) return res.json({ success: false, message: NOT_AUTHORIZED })
+        if (isDemoCustomer(user)) return res.json({ success: false, message: DEMO_ACCOUNT_LOCKED })
 
         const isMatch = await bcrypt.compare(currentPassword, user.password)
         if (!isMatch) return res.json({ success: false, message: "Current password is incorrect" })
 
-        if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/\d/.test(newPassword)) {
-            return res.json({ success: false, message: "New password must be at least 8 characters with an uppercase letter, a lowercase letter and a number" })
+        if (!isStrongPassword(newPassword)) {
+            return res.json({ success: false, message: `New ${PASSWORD_RULES_MESSAGE.toLowerCase()}` })
         }
         if (await bcrypt.compare(newPassword, user.password)) {
             return res.json({ success: false, message: "New password must be different from your current password" })

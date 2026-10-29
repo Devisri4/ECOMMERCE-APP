@@ -12,12 +12,18 @@ const Dashboard = ({ token }) => {
   const load = async () => {
     setError(false)
     try {
-      const [productsRes, ordersRes] = await Promise.all([
+      const [productsRes, ordersRes, subscribersRes] = await Promise.all([
         axios.get(backendUrl + '/api/product/list'),
         axios.post(backendUrl + '/api/order/list', {}, { headers: { token } }),
+        // Optional: the dashboard still loads if the subscriber count is unavailable
+        axios.post(backendUrl + '/api/newsletter/count', {}, { headers: { token } }).catch(() => null),
       ])
       if (!productsRes.data.success || !ordersRes.data.success) throw new Error('load failed')
-      setData({ products: productsRes.data.products, orders: ordersRes.data.orders })
+      setData({
+        products: productsRes.data.products,
+        orders: ordersRes.data.orders,
+        subscribers: subscribersRes?.data?.success ? subscribersRes.data.count : null,
+      })
     } catch (err) {
       console.log(err)
       setError(true)
@@ -54,6 +60,7 @@ const Dashboard = ({ token }) => {
         `${active.filter((o) => !o.payment).length} unpaid (COD / pending)`,
       ].filter(Boolean).join(' · '),
     },
+    { label: 'Subscribers', value: data.subscribers ?? '–', hint: 'Newsletter sign-ups' },
   ]
   const recent = [...orders].sort((a, b) => b.date - a.date).slice(0, 5)
 
@@ -62,7 +69,7 @@ const Dashboard = ({ token }) => {
       <h1 className='text-2xl font-semibold text-white'>Dashboard</h1>
       <p className='mt-1 text-sm text-zinc-400'>Store overview from live data.</p>
 
-      <div className='mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
+      <div className='mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5'>
         {stats
           ? stats.map((s) => (
               <div key={s.label} className='rounded-xl border border-zinc-800 bg-[#202024] p-5'>
@@ -71,7 +78,7 @@ const Dashboard = ({ token }) => {
                 <p className='mt-1 text-xs text-zinc-500'>{s.hint}</p>
               </div>
             ))
-          : [0, 1, 2, 3].map((i) => <div key={i} aria-hidden='true' className='h-32 animate-pulse rounded-xl border border-zinc-800 bg-zinc-800/40' />)}
+          : [0, 1, 2, 3, 4].map((i) => <div key={i} aria-hidden='true' className='h-32 animate-pulse rounded-xl border border-zinc-800 bg-zinc-800/40' />)}
       </div>
 
       <section className='mt-10 rounded-xl border border-zinc-800 bg-[#202024]'>

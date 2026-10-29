@@ -3,6 +3,7 @@ import React, { useState } from 'react'
 import {backendUrl} from '../App'
 import { toast } from 'react-toastify'
 import { friendlyError } from '../utils/messages'
+import { DEMO_ADMIN } from '../utils/session'
 
 const inputClass =
     'w-full rounded-md border border-zinc-700 bg-zinc-950/60 px-3.5 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none transition-colors focus:border-violet-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40'
@@ -97,6 +98,15 @@ return (
                     >
                         {submitting ? 'Signing in…' : 'Login'}
                     </button>
+                    {DEMO_ADMIN && (
+                        <button
+                            type='button'
+                            onClick={() => { setEmail(DEMO_ADMIN.email); setPassword(DEMO_ADMIN.password) }}
+                            className='w-full rounded-md border border-zinc-700 px-4 py-2.5 text-sm font-medium text-zinc-300 transition-colors hover:border-violet-400 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400'
+                        >
+                            Use read-only demo account
+                        </button>
+                    )}
                 </form>
             </div>
 

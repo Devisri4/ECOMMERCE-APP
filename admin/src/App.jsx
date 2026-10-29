@@ -11,6 +11,7 @@ import Login from './components/Login'
 import { ToastContainer, toast } from 'react-toastify';
 import axios from 'axios';
 import 'react-toastify/dist/ReactToastify.css';
+import { isDemoToken } from './utils/session'
 
 // A deployed build never silently falls back to localhost: VITE_BACKEND_URL must be set in production
 export const backendUrl = (
@@ -45,6 +46,8 @@ useEffect(() => {
   return () => { onSessionExpired = () => {} };
 }, []);
 
+  const demo = token !== '' && isDemoToken(token)
+
   // Clear message instead of a login form that can never work
   if (!backendUrl) {
     return (
@@ -66,7 +69,12 @@ useEffect(() => {
       {token === ""
         ? <Login setToken={setToken}/>
         : <>
-        <Navbar setToken={setToken} />
+        <Navbar setToken={setToken} demo={demo} />
+          {demo && (
+            <p role='status' className='border-b border-amber-500/20 bg-amber-500/5 px-4 py-2.5 text-center text-xs text-amber-200 sm:px-8'>
+              You’re viewing a read-only demo. Customer names, addresses and phone numbers are hidden, and changes are disabled.
+            </p>
+          )}
           <div className='flex w-full flex-col md:flex-row'>
             <Sidebar />
             <main className='min-w-0 flex-1 px-4 py-8 text-base sm:px-8 lg:px-10'>

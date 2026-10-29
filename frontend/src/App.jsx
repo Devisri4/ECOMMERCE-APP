@@ -16,6 +16,22 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import OrderSuccess from './pages/OrderSuccess';
 import Account from './pages/Account';
+import NotFound from './pages/NotFound';
+import { pageTitle } from './hooks/usePageTitle';
+
+// Tab titles for fixed routes. Product pages set their own (the product name); anything else is the 404 page.
+const PAGE_TITLES = {
+  '/': '',
+  '/collection': 'Collection',
+  '/about': 'About',
+  '/contact': 'Contact',
+  '/cart': 'Your bag',
+  '/login': 'Sign in',
+  '/place-order': 'Checkout',
+  '/orders': 'My orders',
+  '/order-success': 'Order confirmed',
+  '/account': 'My account',
+};
 
 const App = () => {
   const { pathname } = useLocation();
@@ -23,6 +39,11 @@ const App = () => {
   // Start each new page at the top instead of keeping the previous scroll position
   useEffect(() => {
     window.scrollTo(0, 0);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (pathname.startsWith('/product/')) return;
+    document.title = pageTitle(Object.hasOwn(PAGE_TITLES, pathname) ? PAGE_TITLES[pathname] : 'Page not found');
   }, [pathname]);
 
   return (
@@ -54,6 +75,7 @@ const App = () => {
           <Route path="/verify" element={<Navigate to="/orders" replace />} />
           <Route path="/order-success" element={<OrderSuccess />} />
           <Route path="/account" element={<Account />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
         </div>
       </main>

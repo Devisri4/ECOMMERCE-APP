@@ -101,6 +101,13 @@ const expireSessionIfOpen = async (sessionId) => {
   }
 };
 
+// A confirmed card payment: mark the order paid and empty the customer's bag
+const markPaid = async (order) => {
+  order.payment = true;
+  await order.save();
+  await userModel.findByIdAndUpdate(order.userId, { cartData: {} });
+};
+
 // Brings an unpaid Stripe order in line with its Checkout Session.
 // Returns 'paid' | 'removed' | 'open' | 'processing' | 'skipped'.
 const syncStripeOrder = async (order) => {
@@ -109,9 +116,7 @@ const syncStripeOrder = async (order) => {
   if (session.metadata?.orderId !== String(order._id)) return "skipped";
 
   if (session.payment_status === "paid") {
-    order.payment = true;
-    await order.save();
-    await userModel.findByIdAndUpdate(order.userId, { cartData: {} });
+    await markPaid(order);
     return "paid";
   }
   if (session.status === "expired") {
@@ -256,9 +261,7 @@ const verifyStripe = async (req, res) => {
     if (session.metadata?.orderId !== String(order._id)) return res.redirect(cartUrl);
 
     if (session.payment_status === "paid") {
-      order.payment = true;
-      await order.save();
-      await userModel.findByIdAndUpdate(order.userId, { cartData: {} });
+      await markPaid(order);
       return res.redirect(successUrl);
     }
 
@@ -274,6 +277,42 @@ const verifyStripe = async (req, res) => {
   } catch (err) {
     console.log(err);
     return res.redirect(cartUrl);
+  }
+};
+
+// ----------------- STRIPE WEBHOOK -----------------
+// Stripe calls this directly when a Checkout Session finishes or expires, so an order is marked paid even
+// if the customer closes the tab before the redirect. The signature (STRIPE_WEBHOOK_SECRET) proves the
+// request came from Stripe; the route receives the raw body, which the signature check needs.
+const stripeWebhook = async (req, res) => {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!stripe || !secret) return res.status(503).json({ received: false });
+
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, req.headers["stripe-signature"], secret);
+  } catch (err) {
+    console.log("Stripe webhook signature check failed:", err.message);
+    return res.status(400).json({ received: false });
+  }
+
+  try {
+    const session = event.data?.object;
+    const orderId = session?.metadata?.orderId;
+    const order = typeof orderId === "string" && /^[a-f0-9]{24}$/i.test(orderId) ? await orderModel.findById(orderId) : null;
+
+    // Only the session this order was created with (same rule as verifyStripe)
+    if (order && order.paymentMethod === "Stripe" && order.stripeSessionId === session.id && !order.payment) {
+      const paid =
+        (event.type === "checkout.session.completed" && session.payment_status === "paid") ||
+        event.type === "checkout.session.async_payment_succeeded";
+      if (paid) await markPaid(order);
+      else if (event.type === "checkout.session.expired") await orderModel.findByIdAndDelete(order._id);
+    }
+    res.json({ received: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ received: false }); // Stripe retries failed deliveries
   }
 };
 
@@ -326,10 +365,30 @@ const cancelOrder = async (req, res) => {
 };
 
 // ----------------- ADMIN -----------------
+// The demo admin sees real orders but not who placed them: name, street, ZIP, phone and email are
+// replaced; city/state/country stay so the list still reads like a real store.
+export const maskAddress = (address = {}) => ({
+  firstName: "Customer",
+  lastName: "(hidden in demo)",
+  street: "Address hidden",
+  city: address.city || "",
+  state: address.state || "",
+  country: address.country || "",
+  zipcode: "•••",
+  phone: "Phone hidden",
+});
+
 const allOrders = async (req, res) => {
   try {
-    let orders = await orderModel.find({});
-    if (await syncPendingStripeOrders(orders)) orders = await orderModel.find({});
+    const query = () => orderModel.find({}).sort({ date: -1 });
+    let orders = await query();
+    if (await syncPendingStripeOrders(orders)) orders = await query();
+    if (req.adminDemo) {
+      orders = orders.map((o) => {
+        const { userId, ...order } = o.toObject(); // eslint-disable-line no-unused-vars
+        return { ...order, address: maskAddress(order.address) };
+      });
+    }
     res.json({ success: true, orders });
   } catch (err) {
     sendServerError(res, err);
@@ -369,6 +428,7 @@ export {
   placeOrder,
   placeOrderStripe,
   verifyStripe,
+  stripeWebhook,
   userOrders,
   cancelOrder,
   allOrders,

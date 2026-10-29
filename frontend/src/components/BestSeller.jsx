@@ -14,18 +14,18 @@ const BestSeller = () => {
     useEffect(() => {
         if (!products || products.length === 0) return;
 
-        // 1️⃣ filter bestseller products
+        // Bestsellers only
         const filtered = products.filter(
             (item) => item.bestseller === true
         );
 
-        // 2️⃣ sort by newest first
+        // Newest first
         filtered.sort((a, b) => b.date - a.date);
 
         setBestSeller(filtered);
     }, [products]);
 
-    // 3️⃣ pagination logic
+    // Pagination
     const totalPages = Math.ceil(bestSeller.length / ITEMS_PER_PAGE);
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     const endIndex = startIndex + ITEMS_PER_PAGE;
@@ -38,7 +38,7 @@ const BestSeller = () => {
                 index="04"
                 eyebrow="Most loved"
                 title="Best sellers"
-                description="Explore our collection of best sellers — curated for those who value elegance, craftsmanship, and timeless appeal."
+                description="The pieces our customers come back for most."
                 linkTo="/collection"
             />
 

@@ -15,7 +15,7 @@ const policies = [
   {
     icon: assets.support_img,
     title: 'Customer Support',
-    text: 'Our support team is here to help — reach out anytime for quick assistance.',
+    text: 'Questions about sizing or an order? Write to us, Monday to Saturday, and we’ll reply within a day.',
   },
 ]
 

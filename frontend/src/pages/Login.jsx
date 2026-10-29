@@ -128,7 +128,7 @@ const Login = () => {
     }
   };
 
-  // ✅ FIX: dependency array added
+  // Already signed in (or just signed in): continue to where the shopper was going
   useEffect(() => {
     if (token) {
       navigate(redirectTo, { replace: true });

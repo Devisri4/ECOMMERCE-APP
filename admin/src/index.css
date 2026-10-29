@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&family=Prata&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -60,8 +60,8 @@ input::placeholder,textarea::placeholder{
   align-self: center;
 }
 
-/* Sidebar NavLink active state */
-.active{
+/* Sidebar NavLink active state (scoped to the admin nav, so other .active classes aren't affected) */
+.admin-nav a.active{
   background-color: rgba(139, 92, 246, 0.14);
   border-color: rgba(139, 92, 246, 0.5);
   color: #ffffff;

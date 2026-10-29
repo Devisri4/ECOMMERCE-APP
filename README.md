@@ -24,7 +24,8 @@ Both sign-in screens also have a **Use demo account** button that fills these in
 - **Read-only demo admin:** see the dashboard, products and orders. Customer names, addresses and phone numbers
   are masked, and every change is refused by the API.
 
-FOREVER is a portfolio project: the store details are fictional and no orders are shipped or charged.
+FOREVER is a portfolio project: the store details are fictional and no orders are shipped or charged. The admin
+dashboard is filled with generated sample orders (`backend/scripts/sample-orders.js`) so the charts have data to show.
 
 ## Features
 

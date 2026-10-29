@@ -104,7 +104,7 @@ const ProfileDetails = ({ profile, onSaved }) => {
 
 /* ---------------- Change password ---------------- */
 const ChangePassword = () => {
-  const { backendUrl, token } = useContext(ShopContext)
+  const { backendUrl, token, setToken } = useContext(ShopContext)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -129,7 +129,12 @@ const ChangePassword = () => {
     try {
       const res = await axios.post(backendUrl + '/api/user/password', { currentPassword, newPassword }, { headers: { token } })
       if (res.data.success) {
-        toast.success('Your password has been updated.')
+        // Other devices are now signed out; keep this one signed in with the fresh token
+        if (res.data.token) {
+          localStorage.setItem('token', res.data.token)
+          setToken(res.data.token)
+        }
+        toast.success('Your password has been updated. Other devices have been signed out.')
         setCurrentPassword('')
         setNewPassword('')
         setConfirmPassword('')

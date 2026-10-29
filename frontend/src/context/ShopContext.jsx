@@ -166,7 +166,7 @@ const ShopContextProvider = ({ children }) => {
                 }
             }
         } catch (err) {
-            console.log(err);
+            console.error(err);
         } finally {
             if (isCurrent()) setCartLoaded(true);
         }
@@ -227,7 +227,7 @@ const ShopContextProvider = ({ children }) => {
                 setWishlist(res.data.wishlist);
                 localStorage.removeItem(GUEST_WISHLIST_KEY);
             })
-            .catch((err) => console.log(err));
+            .catch((err) => console.error(err));
         return () => { active = false; };
     }, [token, backendUrl]);
 
@@ -327,7 +327,7 @@ const ShopContextProvider = ({ children }) => {
                     return false;
                 }
             } catch (error) {
-                console.log(error);
+                console.error(error);
                 undoAdd(itemId, size);
                 toast.error(friendlyError(error, 'We couldn’t add this item to your bag. Please try again.'));
                 return false;
@@ -377,7 +377,7 @@ const ShopContextProvider = ({ children }) => {
                     toast.error(friendlyError(res.data.message, 'We couldn’t update your bag. Please try again.'));
                 }
             } catch (error) {
-                console.log(error);
+                console.error(error);
                 setCartItems(previous);
                 toast.error(friendlyError(error, 'We couldn’t update your bag. Please try again.'));
             }
@@ -424,7 +424,7 @@ const ShopContextProvider = ({ children }) => {
     getProductsData,
     updateProduct,
     cartItems,
-    setCartItems,   // ✅ MUST BE HERE
+    setCartItems,
     currency,
     delivery_fee,
     addToCart,

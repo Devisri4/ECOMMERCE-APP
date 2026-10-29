@@ -18,7 +18,7 @@ const LatestCollection = () => {
         index='02'
         eyebrow='New in'
         title='Latest collections'
-        description='Discover our newest styles curated for every trend and season. Explore fresh arrivals and elevate your style with our newest collection.'
+        description='The newest pieces in the store, from everyday tees to winter layers.'
         linkTo='/collection'
       />
 

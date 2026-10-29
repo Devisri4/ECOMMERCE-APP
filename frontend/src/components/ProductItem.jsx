@@ -7,7 +7,7 @@ import WishlistButton from './WishlistButton';
 
 const ProductItem = ({ id, image, name, price, soldOut = false, rating = 0, reviewCount = 0 }) => {
 
-    // ✅ handle image array OR string
+    // Products store an array of images; a single string is accepted too
     const productImage = optimizeImage(Array.isArray(image) ? image[0] : image, 600);
     // second shot (if any) is revealed on hover
     const hoverImage = Array.isArray(image) && image.length > 1 ? optimizeImage(image[1], 600) : null;

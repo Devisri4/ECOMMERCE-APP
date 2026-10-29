@@ -16,7 +16,7 @@ userRouter.post('/admin', adminLoginLimiter, adminLogin)
 // Customer account (token required; user comes from the token, never the request body)
 userRouter.post('/profile', authUser, getProfile)
 userRouter.post('/profile/update', authUser, updateProfile)
-userRouter.post('/password', authUser, changePassword)
+userRouter.post('/password', loginLimiter, authUser, changePassword)
 
 // Saved addresses and wishlist
 userRouter.post('/addresses', authUser, listAddresses)

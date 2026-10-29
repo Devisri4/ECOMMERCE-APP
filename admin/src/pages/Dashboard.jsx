@@ -27,7 +27,7 @@ const Dashboard = ({ token }) => {
         subscribers: subscribersRes?.data?.success ? subscribersRes.data.count : null,
       })
     } catch (err) {
-      console.log(err)
+      console.error(err)
       setError(true)
     }
   }

@@ -36,16 +36,17 @@ app.use((req, res, next) => {
   })
   next()
 })
-// Reconnect to MongoDB if an earlier attempt failed (see config/mongodb.js)
-app.use('/api', ensureDB)
-// Stripe webhook needs the unparsed body to check its signature, so it is registered before express.json()
-app.post('/api/order/stripe-webhook', express.raw({ type: 'application/json' }), stripeWebhook)
-app.use(express.json())
+// CORS first, so browser preflight checks are answered without waiting for the database.
 // Only the configured storefront/admin origins may call the API from a browser.
 // Requests without an Origin header (server-to-server, Stripe redirects, curl) are not affected.
 app.use(cors({
   origin: (origin, callback) => callback(null, !origin || allowedOrigins().includes(origin)),
 }))
+// Reconnect to MongoDB if an earlier attempt failed (see config/mongodb.js)
+app.use('/api', ensureDB)
+// Stripe webhook needs the unparsed body to check its signature, so it is registered before express.json()
+app.post('/api/order/stripe-webhook', express.raw({ type: 'application/json' }), stripeWebhook)
+app.use(express.json())
 
 // api endpoints
 app.use('/api/user', userRouter)
@@ -59,8 +60,12 @@ app.get('/', (req, res) => {
   res.send('API Working')
 })
 
-// Last-resort error handler: log details, return a generic message
+// Last-resort error handler: log details, return a generic message.
+// A body that isn't valid JSON is the client's mistake (400), not a server error.
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+  if (err?.type === "entity.parse.failed") {
+    return res.status(400).json({ success: false, message: "The request body isn't valid JSON." })
+  }
   console.error(err)
   res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' })
 })

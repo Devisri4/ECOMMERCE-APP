@@ -70,7 +70,7 @@ const OrderHistory = () => {
       setLoadFailed(true);
       return false;
     } catch (err) {
-      console.log(err);
+      console.error(err);
       setLoadFailed(true);
       return false;
     } finally {
@@ -110,7 +110,7 @@ const OrderHistory = () => {
         await loadOrderData(); // status may have moved on (e.g. shipped)
       }
     } catch (error) {
-      console.log(error);
+      console.error(error);
       toast.error(friendlyError(error, "We couldn’t cancel this order. Please try again."));
     } finally {
       setCancellingId(null);

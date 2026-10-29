@@ -19,6 +19,8 @@ const userSchema = new mongoose. Schema({
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
+    passwordChangedAt: { type: Number },           // ms; sessions issued before this are signed out
+
     cartData: { type: Object, default: {} },
     addresses: { type: [addressSchema], default: [] },
     wishlist: { type: [String], default: [] }      // product ids

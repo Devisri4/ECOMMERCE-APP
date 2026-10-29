@@ -196,7 +196,7 @@ const PlaceOrder = () => {
       }
 
     } catch (error) {
-      console.log(error)
+      console.error(error)
       toast.error(friendlyError(error, 'We couldn’t place your order. Please try again.'))
     } finally {
       if (!redirecting) setPlacing(false)

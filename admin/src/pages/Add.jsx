@@ -30,7 +30,7 @@ const Add = ({token, demo = false})=>{
       toast.error(friendlyError(response.data.message, "Couldn’t add the product. Please try again."))
       return false
     } catch (error) {
-        console.log(error);
+        console.error(error);
         toast.error(friendlyError(error, "Couldn’t add the product. Please try again."))
         return false
     }

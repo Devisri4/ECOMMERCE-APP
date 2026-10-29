@@ -205,9 +205,11 @@ const changePassword = async (req, res) => {
 
         const salt = await bcrypt.genSalt(10);
         user.password = await bcrypt.hash(newPassword, salt);
+        // Signs out every other session (middleware/auth.js); this device gets a fresh token below
+        user.passwordChangedAt = Date.now();
         await user.save();
 
-        res.json({ success: true, message: "Password updated" })
+        res.json({ success: true, message: "Password updated", token: createToken(user._id) })
     } catch (error) {
         sendServerError(res, error);
     }

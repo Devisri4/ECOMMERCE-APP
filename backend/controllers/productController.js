@@ -13,6 +13,10 @@ const parseJson = (value, fallback) => {
 }
 
 const MAX_STOCK = 9999
+const MAX_PRICE = 1000000 // ₹10,00,000
+
+// Only real ObjectId strings reach findById (an object like { "$ne": null } would otherwise match a product)
+const isId = (id) => typeof id === "string" && /^[a-f0-9]{24}$/i.test(id)
 
 // Stock arrives as JSON { size: units } for the sizes the admin tracks. Only selected sizes are kept;
 // a size left out isn't tracked. Returns { error } or { stock }.
@@ -41,7 +45,10 @@ export const validateProductFields = ({ name, description, price, category, subC
     if (typeof name !== "string" || !name.trim() || typeof description !== "string" || !description.trim()) {
         return { error: "Name and description are required" }
     }
-    if (!(numericPrice > 0)) return { error: "Price must be greater than 0" }
+    // Whole rupees only: order totals and Stripe amounts are then always exact
+    if (!Number.isInteger(numericPrice) || numericPrice < 1 || numericPrice > MAX_PRICE) {
+        return { error: "Price must be a whole number of rupees from 1 to 10,00,000" }
+    }
     if (!CATEGORIES.includes(category) || !SUB_CATEGORIES.includes(subCategory)) return { error: "Invalid category" }
     if (!Array.isArray(parsedSizes) || parsedSizes.length === 0 || !parsedSizes.every((s) => SIZES.includes(s))) {
         return { error: "Select at least one valid size" }
@@ -100,9 +107,11 @@ const listProducts = async (req, res) => {
 //function for removing product
 const removeProduct = async (req, res) => {
     try {
-        await productModel.findByIdAndDelete(req.body.id)
+        if (!isId(req.body.id)) return res.json({ success: false, message: "Product not found" })
+        const removed = await productModel.findByIdAndDelete(req.body.id)
+        if (!removed) return res.json({ success: false, message: "Product not found" })
         // Its reviews go with it (reviews store the product id as a string)
-        if (typeof req.body.id === "string") await reviewModel.deleteMany({ productId: req.body.id })
+        await reviewModel.deleteMany({ productId: req.body.id })
         res.json({success: true, message: "Product Removed"})
     } catch (error) {
         sendServerError(res, error, "Couldn't remove the product. Please try again.")
@@ -113,7 +122,8 @@ const removeProduct = async (req, res) => {
 const singleProduct = async (req, res) => {
     try {
         const { productId } = req.body
-        const product = await productModel.findById(productId)
+        // An invalid id is simply "not found" (the admin edit page shows that state)
+        const product = isId(productId) ? await productModel.findById(productId) : null
         res.json({success: true, product})
     } catch (error){
         sendServerError(res, error, "Couldn't load this product.")
@@ -126,6 +136,7 @@ const singleProduct = async (req, res) => {
 // A new file in image1–image4 replaces that slot. Only URLs the product already has can be kept.
 const updateProduct = async (req, res) => {
     try {
+        if (!isId(req.body.id)) return res.json({ success: false, message: "Product not found" })
         const product = await productModel.findById(req.body.id)
         if (!product) return res.json({ success: false, message: "Product not found" })
 

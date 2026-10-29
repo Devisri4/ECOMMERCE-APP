@@ -23,7 +23,8 @@ const connectDB = async () => {
   }
 
   pending ??= mongoose
-    .connect(uri, { dbName: process.env.MONGODB_DB || DEFAULT_DB_NAME })
+    // Give up after 5s (not the default 30s), so a database outage fails fast instead of timing out on Vercel
+    .connect(uri, { dbName: process.env.MONGODB_DB || DEFAULT_DB_NAME, serverSelectionTimeoutMS: 5000 })
     .catch((error) => console.error("MongoDB connection failed:", error.message))
     .finally(() => { pending = null; });
   await pending;

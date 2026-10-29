@@ -17,6 +17,11 @@ const { addToCart, updateCart } = await import("../controllers/cartController.js
 const { loginUser, registerUser, isStrongPassword } = await import("../controllers/userController.js");
 const { default: authUser } = await import("../middleware/auth.js");
 const { default: rateLimit } = await import("../middleware/rateLimit.js");
+const { default: userModel } = await import("../models/userModel.js");
+
+// authUser looks the account up: an in-memory stand-in for the users it is asked about
+let users = {};
+userModel.findById = (id) => ({ select() { return this; }, lean: async () => users[id] || null });
 
 test("cart rejects prototype keys without touching Object.prototype", async () => {
   for (const [itemId, size] of [["__proto__", "toString"], ["constructor", "prototype"], [{ $ne: null }, "M"], ["65f1c0ffee0000000000abcd", ["M"]]]) {
@@ -70,6 +75,7 @@ test("password strength matches the sign-up checklist", () => {
 });
 
 test("customer tokens must carry an expiry", async () => {
+  users = { u1: { _id: "u1" } };
   const run = async (token) => {
     const res = mockRes();
     const req = { headers: { token } };
@@ -99,4 +105,20 @@ test("rate limiter blocks after the limit with 429 and Retry-After", () => {
   assert.equal(blocked.res.body.message, "slow down");
   assert.ok(Number(blocked.res.headers["Retry-After"]) > 0);
   assert.equal(call("2.2.2.2").passed, true, "other clients are not affected");
+});
+
+test("a password change signs out sessions issued before it, and deleted accounts", async () => {
+  const run = async (token) => {
+    const res = mockRes();
+    let passed = false;
+    await authUser({ headers: { token } }, res, () => { passed = true; });
+    return passed;
+  };
+  const now = Math.floor(Date.now() / 1000);
+  const tokenAt = (iat) => jwt.sign({ id: "u1", iat }, process.env.JWT_SECRET, { expiresIn: "1h" });
+  users = { u1: { _id: "u1", passwordChangedAt: now * 1000 } };
+  assert.equal(await run(tokenAt(now - 60)), false, "issued before the change");
+  assert.equal(await run(tokenAt(now)), true, "issued at the change (this device)");
+  users = {};
+  assert.equal(await run(tokenAt(now)), false, "account no longer exists");
 });

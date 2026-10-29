@@ -37,7 +37,7 @@ const Orders = ({ token, demo = false }) => {
         setLoadError(true)
       }
     } catch (error) {
-      console.log(error)
+      console.error(error)
       setLoadError(true)
     } finally {
       setLoading(false)
@@ -56,7 +56,7 @@ const Orders = ({ token, demo = false }) => {
         await fetchAllOrders() // e.g. "changed a moment ago": show the order as it is now
       }
     } catch (error) {
-      console.log(error)
+      console.error(error)
       toast.error(friendlyError(error, 'Couldn’t update the order status. Please try again.'))
     } finally {
       setUpdatingId(null)

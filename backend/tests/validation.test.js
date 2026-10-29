@@ -54,6 +54,7 @@ test("product validation", () => {
   assert.equal(ok.fields.price, 2799);
   assert.equal(ok.fields.bestseller, true);
   assert.match(validateProductFields({ ...base, price: "0" }).error, /Price/);
+  for (const price of ["99.5", "Infinity", "1e9", "-5"]) assert.match(validateProductFields({ ...base, price }).error, /whole number/);
   assert.match(validateProductFields({ ...base, category: "Pets" }).error, /category/);
   assert.match(validateProductFields({ ...base, sizes: '["XXXL"]' }).error, /size/);
   assert.match(validateProductFields({ ...base, name: " " }).error, /required/);
@@ -68,4 +69,37 @@ test("catalogue reprice divides by 3, ends in 99 and keeps the order", async () 
   const before = [1999, 2299, 3699, 4599, 6099, 7599];
   const after = before.map(repriced);
   assert.deepEqual(after, [...after].sort((a, b) => a - b));
+});
+
+test("test-order clean-up flags USD orders and junk addresses, keeps real and demo orders", async () => {
+  const { testOrderReason } = await import("../scripts/cleanup-test-orders.js");
+  const { DEMO_ORDER_ADDRESS } = await import("../controllers/orderController.js");
+  assert.equal(testOrderReason({ currency: "INR", address: good }), null);
+  assert.equal(testOrderReason({ currency: "INR", address: { ...DEMO_ORDER_ADDRESS } }), null);
+  assert.match(testOrderReason({ address: good }), /US dollars/);
+  assert.match(testOrderReason({ currency: "INR", address: { ...good, city: "rgfdv1", zipcode: "x" } }), /address fails/);
+  assert.match(testOrderReason({ currency: "INR", address: { ...good, city: "wsfWsd", state: "rgfdv", country: "efsd" } }), /country/);
+  assert.match(testOrderReason({ currency: "INR", address: { ...good, state: "rgfdv" } }), /state/);
+});
+
+test("sample orders are realistic, rupee-priced, consistent and never hold stock", async () => {
+  const { buildSampleOrders, SAMPLE_USER_ID, SAMPLE_COUNT } = await import("../scripts/sample-orders.js");
+  const { testOrderReason } = await import("../scripts/cleanup-test-orders.js");
+  const products = [
+    { _id: "a", name: "Tee", price: 699, sizes: ["S", "M"], stock: { S: 3 }, rating: 4, reviewCount: 1 },
+    { _id: "b", name: "Jacket", price: 2499, sizes: ["L"] },
+  ];
+  const now = Date.now();
+  const orders = buildSampleOrders(products, now);
+  assert.equal(orders.length, SAMPLE_COUNT);
+  assert.deepEqual(buildSampleOrders(products, now), orders, "same seed, same orders");
+  for (const o of orders) {
+    assert.equal(o.userId, SAMPLE_USER_ID);
+    assert.equal(testOrderReason(o), null, "would pass the test-order clean-up");
+    assert.equal(o.amount, o.items.reduce((s, i) => s + i.price * i.quantity, 0) + deliveryCharge);
+    assert.ok(o.items.every((i) => i.stockReserved === false && i.stock === undefined && products.find((p) => p._id === i._id).sizes.includes(i.size)));
+    assert.ok(o.date <= now && o.date > now - 61 * 864e5);
+    if (o.status === "Cancelled") assert.equal(o.payment, false);
+    if (o.paymentMethod === "COD") assert.equal(o.payment, o.status === "Delivered");
+  }
 });

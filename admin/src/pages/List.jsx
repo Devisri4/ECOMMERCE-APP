@@ -49,7 +49,7 @@ const List = ({token, demo = false}) => {
         setLoadError(true)
       }
     } catch (error) {
-      console.log(error)
+      console.error(error)
       setLoadError(true)
     } finally {
       setLoading(false)
@@ -72,7 +72,7 @@ const List = ({token, demo = false}) => {
       }
 
     } catch (error) {
-      console.log(error)
+      console.error(error)
       toast.error(friendlyError(error, 'Couldn’t remove the product. Please try again.'))
     } finally {
       setRemovingId(null)

@@ -29,7 +29,7 @@ const Edit = ({ token, demo = false }) => {
           setStatus(res.data.success ? 'missing' : 'error');
         }
       } catch (error) {
-        console.log(error);
+        console.error(error);
         if (!cancelled) setStatus('error');
       }
     };
@@ -62,7 +62,7 @@ const Edit = ({ token, demo = false }) => {
       toast.error(friendlyError(res.data.message, 'Couldn’t update the product. Please try again.'));
       return false;
     } catch (error) {
-      console.log(error);
+      console.error(error);
       toast.error(friendlyError(error, 'Couldn’t update the product. Please try again.'));
       return false;
     }

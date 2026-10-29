@@ -37,7 +37,7 @@ const OrderSuccess = () => {
         setOrder(found || null)
         setStatus(paidIfOnline ? 'confirmed' : 'unconfirmed')
       } catch (error) {
-        console.log(error)
+        console.error(error)
         if (!cancelled) setStatus('unconfirmed')
       }
     }
@@ -72,13 +72,13 @@ const OrderSuccess = () => {
         )}
 
         <h1 className='mt-8 font-display text-2xl text-ink sm:text-3xl' role={confirmed ? 'status' : 'alert'}>
-          {confirmed ? 'Order Placed Successfully' : 'We couldn’t confirm this order'}
+          {confirmed ? 'Order placed' : 'We couldn’t confirm this order'}
         </h1>
 
         <p className='mx-auto mt-4 max-w-sm text-sm leading-relaxed text-neutral-600'>
           {confirmed
             ? 'Thank you for shopping with FOREVER. We’ve received your order and will let you know when it ships.'
-            : 'If you completed a payment, please check My Orders. If it isn’t listed, your bag has not been charged — you can try checking out again.'}
+            : 'If you completed a payment, please check My orders. If it isn’t listed, you haven’t been charged and can try checking out again.'}
         </p>
 
         {confirmed && (orderId || order) && (
@@ -105,8 +105,8 @@ const OrderSuccess = () => {
         )}
 
         <div className='mt-10 flex flex-col gap-3 sm:flex-row sm:justify-center'>
-          <Link to='/orders' className='btn-primary'>View My Orders</Link>
-          <Link to='/collection' className='btn-secondary'>Continue Shopping</Link>
+          <Link to='/orders' className='btn-primary'>View my orders</Link>
+          <Link to='/collection' className='btn-secondary'>Continue shopping</Link>
         </div>
       </div>
     </div>
